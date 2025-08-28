@@ -23,6 +23,7 @@ def test_simple_model():
             super(SimpleModel, self).__init__()
             self.linear1 = torch.nn.Linear(10, 20)
             self.relu = torch.nn.ReLU()
+            torch.nn.BatchNorm2d
             self.linear2 = torch.nn.Linear(20, 5)
             
         def forward(self, x):
@@ -41,35 +42,12 @@ def test_simple_model():
     # Convert to MRT
     print("\nConverting PyTorch model to MRT...")
     ep = torch.export.export(model, ( example_inputs, ))
-    
-    print("Exploring exported program structure:")
-    print(f"ep.state_dict keys: {list(ep.state_dict.keys())}")
-    for k, v in list(ep.state_dict.items())[:2]:
-        print(f"  {k}: shape={v.shape}, dtype={v.dtype}")
-    
-    print(f"ep.constants keys: {list(ep.constants.keys()) if hasattr(ep, 'constants') else 'No constants'}")
-    print(f"ep.named_buffers(): {list(dict(ep.named_buffers()).keys()) if hasattr(ep, 'named_buffers') else 'No buffers'}")
-    
-    # Show what gets bound in the ChainMap
-    from collections import ChainMap, OrderedDict
-    to_bind_parameters = ChainMap(ep.state_dict, OrderedDict(ep.named_buffers()), ep.constants)
-    print(f"ChainMap keys (what gets bound): {list(to_bind_parameters.keys())}")
-    
     mrt_graph, mrt_params = pytorch_to_mrt(ep)
-    
-    print(f"MRT graph keys: {list(mrt_graph.keys())}")
-    print(f"MRT params keys: {list(mrt_params.keys())}")
-    if mrt_params:
-        print("Sample param shapes:")
-        for i, (k, v) in enumerate(list(mrt_params.items())[:3]):
-            print(f"  {k}: {v.shape if hasattr(v, 'shape') else type(v)}")
     
     # Test inference with original model
     model.eval()
     with torch.no_grad():
         original_output = model(example_inputs)
-    print(f"\nOriginal model output shape: {original_output.shape}")
-    print(f"Original model output sample: {original_output.flatten()[:5]}")
     
     # Convert back to PyTorch
     print("\nConverting MRT back to PyTorch...")
@@ -78,8 +56,7 @@ def test_simple_model():
     # Test inference with converted model
     with torch.no_grad():
         converted_output = torch_model(example_inputs)
-    print(f"Converted model output shape: {converted_output.shape}")
-    print(f"Converted model output sample: {converted_output.flatten()[:5]}")
+    assert np.allclose(original_output.numpy(), converted_output.numpy())
 
 def test_conv_model():
     """Test conversion with a convolutional model."""
@@ -89,7 +66,7 @@ def test_conv_model():
             super(ConvModel, self).__init__()
             self.conv1 = torch.nn.Conv2d(3, 16, 3, padding=1)
             self.relu = torch.nn.ReLU()
-            self.conv2 = torch.nn.Conv2d(16, 32, 3, padding=1)
+            self.conv2 = torch.nn.Conv2d(16, 32, 3, bias=False, padding=2)
             self.pool = torch.nn.AdaptiveAvgPool2d((8, 8))
             self.flatten = torch.nn.Flatten()
             self.fc = torch.nn.Linear(32 * 8 * 8, 10)
@@ -116,15 +93,22 @@ def test_conv_model():
     ep = torch.export.export(model, ( example_inputs, ))
     mrt_graph, mrt_params = pytorch_to_mrt(ep)
     
-    print(f"MRT graph keys: {list(mrt_graph.keys())}")
-    print(f"MRT params count: {len(mrt_params)}")
-    
     # Test inference with original model
     model.eval()
     with torch.no_grad():
         original_output = model(example_inputs)
-    print(f"\nOriginal model output shape: {original_output.shape}")
-    print(f"Original model output sample: {original_output.flatten()[:5]}")
+
+    # Convert back to PyTorch
+    print("\nConverting MRT back to PyTorch...")
+    torch_model = mrt_to_pytorch(mrt_graph, mrt_params)
+    ep = torch.export.export(model, ( example_inputs, ))
+    mrt_graph, mrt_params = pytorch_to_mrt(ep)
+    torch_model = mrt_to_pytorch(mrt_graph, mrt_params)
+    
+    # Test inference with converted model
+    with torch.no_grad():
+        converted_output = torch_model(example_inputs)
+    assert np.allclose(converted_output.numpy(), original_output.numpy())
 
 def test_type_infer():
     """Test the type inference function."""
@@ -171,8 +155,8 @@ def test_type_infer():
 
 if __name__ == "__main__":
     print("Testing PyTorch to MRT conversion...")
-    test_simple_model()
-    print("\n" + "="*50 + "\n")
-    # test_conv_model()  # Conv operations not yet supported in TORCH_MRT_OP_MAP
+    # test_simple_model()
+    #  print("\n" + "="*50 + "\n")
+    test_conv_model()  # Conv operations now supported
     # print("\n" + "="*50 + "\n")
     # test_type_infer()  # Type inference not yet implemented
