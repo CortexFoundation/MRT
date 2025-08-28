@@ -1,0 +1,94 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.S
+# C extensions
+*.so
+*.ll
+.npm
+# Distribution / packaging
+.Python
+env/
+build/
+build-*/
+dist/
+downloads/
+*.egg-info/
+.installed.cfg
+*.egg
+.conda/
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Sphinx documentation
+docs/_build/
+docs/_staging/
+
+# pyenv
+.python-version
+
+# dotenv
+.env
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# vim temporary files
+*.swp
+*.swo
+
+# Visual Studio
+.vs
+
+# Visual Studio Code
+.vscode
+
+# Python type checking
+.mypy_cache/
+.pyre/
+
+# pipenv files
+Pipfile
+Pipfile.lock
+
+# Downloaded models/datasets
+.tvm_test_data
+.dgl
+.caffe2
+
+# Local docs build
+_docs/
+jvm/target
+.config/configstore/
+.ci-py-scripts/
+
+# ZKML temp data
+zkml_data
+*.log
