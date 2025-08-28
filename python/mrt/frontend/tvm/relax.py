@@ -19,11 +19,14 @@ from .types import *
 __ALL__ = [
    "expr2symbol", "symbol2expr",
    "mod2graph", "graph2mod",
-   "tvm_type_infer" ]
+   "type_infer" ]
 
-def tvm_type_infer(expr: TVMExpr) -> TVMExpr:
+def type_infer(symbol: Symbol) -> Symbol:
+    expr = symbol2expr(symbol)
     builder = relax.BlockBuilder()
-    return builder.normalize(expr)
+    expr = builder.normalize(expr)
+    out, _ = expr2symbol(expr)
+    return out
 
 NamedParametersT = typing.Dict[str, R.Tensor]
 

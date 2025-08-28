@@ -84,8 +84,12 @@ sub = _register_op(SUB)
 max_axis = _register_op(MAX_AXIS)
 mul = _register_op(MUL)
 div = _register_op(DIV)
+matmul = _register_op(MATMUL)
 exp = _register_op(EXP)
 negative = _register_op(NEGATIVE)
+
+sigmoid = _register_op(SIGMOID)
+softmax = _register_op(SOFTMAX)
 
 requant = _register_op(REQUANT)
 pclip = _register_op(PCLIP)

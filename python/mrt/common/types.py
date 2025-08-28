@@ -1,9 +1,13 @@
 import typing
 
-import tvm
 import numpy as np
 
-OpOutputT = typing.Union[tvm.nd.NDArray, list]
+try:
+    import tvm
+    OpOutputT = typing.Union[tvm.nd.NDArray, list]
+except Exception:
+    print("TVM data type failed.")
+
 OpNumpyT = typing.Union[np.ndarray, list]
 ParametersT = typing.Dict[str, OpNumpyT]
 AttrsT = typing.Dict[str, typing.Any]

@@ -92,3 +92,8 @@ jvm/target
 # ZKML temp data
 zkml_data
 *.log
+*.ptau
+
+# AI Coder
+CLAUDE.md
+QWEN.md

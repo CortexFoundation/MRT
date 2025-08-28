@@ -5,20 +5,13 @@ from mrt.common import config
 #  from mrt.mir import op, opns
 #  from mrt.symbol import Symbol, transform
 
-from mrt.frontend.tvm import relax
-
 #  from . import config
 from . import op, opns
 from .symbol import Symbol, transform
 
 InferTypeT = typing.Callable[[Symbol], Symbol]
+_DEFAULT_TYPE_INFER = None
 _INFER_TYPE_REG: typing.Dict[str, InferTypeT] = {}
-
-def _tvm_type_infer(symbol: Symbol) -> Symbol:
-    expr = relax.symbol2expr(symbol)
-    expr = relax.tvm_type_infer(expr)
-    out, _ = relax.expr2symbol(expr)
-    return out
 
 def register_type_infer(
         *op_names,
@@ -36,7 +29,8 @@ def infer_single(symbol: Symbol) -> Symbol:
     C = config.LogConfig.G()
 
     out = op.retrieve_operator(symbol)
-    _infer = _INFER_TYPE_REG.get(out.op_name, _tvm_type_infer)
+    _infer = _INFER_TYPE_REG.get(out.op_name, _DEFAULT_TYPE_INFER)
+    assert _infer is not None
 
     if symbol.is_near(*C.log_type_infer):
         config.log(

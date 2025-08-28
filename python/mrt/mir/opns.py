@@ -73,6 +73,10 @@ DIV = "divide"
 # ======= unary ops ==============
 
 NEGATIVE = "negative"
+ABS = "abs"
+LOG = "log"
+SQRT = "sqrt"
+POW = "pow"
 
 # ======= auto generate op =========
 ARANGE = "arange"
