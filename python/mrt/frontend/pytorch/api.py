@@ -40,6 +40,7 @@ TORCH_MRT_OP_MAP = {
 
         "relu.default": _T(RELU, 1),
         "relu_.default": _T(RELU, 1),
+        "hardtanh_.default": _T(HARDTANH, 1, [ Attr("min_val", 0.0), Attr("max_val", 6.0) ]),
         "silu_.default": _T(SILU, 1),
 
         "sigmoid.default": _T(SIGMOID, 1),
@@ -50,6 +51,7 @@ TORCH_MRT_OP_MAP = {
             Attr("strides", (1,1)),
             Attr("padding", (0,0)) ]),
 
+        "add.Tensor": _T(ADD, 2),
         "add_.Tensor": _T(ADD, 2),
         "mul.Tensor": _T(MUL, 2),
 
@@ -69,6 +71,7 @@ MRT_TORCH_OP_MAP = {
         TUPLE: lambda *args: [ *args ],
 
         RELU: F.relu,
+        HARDTANH: F.hardtanh,
         SILU: F.silu,
         SIGMOID: F.sigmoid,
         DENSE: F.linear,
