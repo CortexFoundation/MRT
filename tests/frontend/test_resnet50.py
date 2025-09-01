@@ -79,8 +79,8 @@ def test_resnet50_conversion():
     # Convert back to PyTorch
     print("\nConverting MRT back to PyTorch...")
     torch_model = mrt_to_pytorch(mrt_graph, mrt_params)
-    with open("/tmp/resnet50-ex.torch", "w") as f:
-        f.write(str(torch_model))
+    # with open("/tmp/resnet50-ex.torch", "w") as f:
+    #     f.write(str(torch_model))
     
     # Test inference with converted model
     with torch.no_grad():

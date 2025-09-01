@@ -41,8 +41,9 @@ def retrieve_operator(symbol: Symbol) -> Symbol:
     return symbol.copy(args=[as_variable(c) for c in symbol.args])
 
 def _new_op(op_name, *args, extra_attrs=None, **attrs) -> Symbol:
+    name = attrs.pop("name", N.n())
     return Symbol.from_dict({},
-            name=N.n(), op_name=op_name,
+            name=name, op_name=op_name,
             args=args or [], attrs=attrs or {},
             extra_attrs=extra_attrs or {})
 

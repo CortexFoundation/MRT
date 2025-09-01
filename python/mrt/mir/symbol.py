@@ -161,7 +161,7 @@ class _BaseSymbol:
         def _uniform(n: str, max_size: int) -> str:
             if len(n) <= max_size:
                 return n
-            return "..." + n[3-max_size:]
+            return ".." + n[3-max_size:]
 
         arg_len = 40 - 2
         if len(self.args) > 0:
@@ -180,7 +180,7 @@ class _BaseSymbol:
         #          f"*attrs*", _format_printer(self.attrs),
         #          _format_printer(oattrs),
         #              )
-        return "{:>20} = {:>15}{:40} | *attrs:* {} | {}".format(
+        return "{:>20} = {:>15}{:40} | *attrs*: {} | {}".format(
                 _uniform(self.name, 20),
                 self.op_name, args_info,
                 _format_printer(self.attrs),
