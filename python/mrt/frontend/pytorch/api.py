@@ -56,19 +56,19 @@ TORCH_MRT_OP_MAP = {
         "mul.Tensor": _T(MUL, 2),
 
         "flatten.using_ints": _T(FLATTEN, 1, [ Attr("start_dim", 1), Attr("end_dim", -1) ]),
-        "dropout.default": _T(DROP_OUT, 1, [
-            Attr("p", 0.5),
-            Attr("training", False),
-            Attr("inplace", False),
-            ]),
-        "dropout_.default": _T(DROP_OUT, 1, [
-            Attr("p", 0.5),
-            Attr("training", False),
-            Attr("inplace", True),
-            ]),
+        "dropout.default": _T(DROP_OUT, 1),
+        "dropout_.default": _T(DROP_OUT, 1),
+        "cat.default": _T(CONCAT, 1, [ Attr("dim", 0) ]),
+        "view.default": _T(RESHAPE, 1, [ Attr("shape", ()) ]),
+        "transpose.int": _T(TRANSPOSE, 1, [ Attr("dim0", 0), Attr("dim1", 0) ]),
+        "contiguous.default": _T(PASS, 1),
+        "chunk.default": _T(SPLIT, 1, [ Attr("chunks", 1), Attr("dim", 0) ]),
+        "getitem": _T(TUPLE_GET_ITEM, 1, [ Attr("index", 0) ]),
+        "mean.dim": _T(MEAN, 1, [ Attr("dim", None), Attr("keepdim", False) ]),
         }
 MRT_TORCH_OP_MAP = {
         TUPLE: lambda *args: [ *args ],
+        TUPLE_GET_ITEM: lambda x, index: x[index],
 
         RELU: F.relu,
         HARDTANH: F.hardtanh,
@@ -82,10 +82,16 @@ MRT_TORCH_OP_MAP = {
         ADAPTIVE_AVG_POOL2D: F.adaptive_avg_pool2d,
 
         FLATTEN: torch.flatten,
+        CONCAT: torch.cat,
+        RESHAPE: torch.reshape,
+        TRANSPOSE: torch.transpose,
+        PASS: lambda x: x,
+        SPLIT: torch.chunk,
 
         ADD: torch.add,
         MUL: torch.mul,
         DROP_OUT: F.dropout,
+        MEAN: torch.mean,
         }
 
 def create_parameters(ep: torch.export.ExportedProgram):
@@ -194,10 +200,14 @@ def pytorch_to_mrt(
 
             # update args and strip None (optional args must be last)
             args = [a for a in args[:mapper.arg_size] if a is not None]
+            if mapper.op_name == CONCAT:
+                args = args[0]
             env[node] = op._new_op(mapper.op_name, *args, name=node.name, **attrs)
         else:
             raise ValueError(f"Unsupported op {node.op}")
 
+        #  if node.op != "output":
+        #      assert isinstance(env[node], Symbol), env[node]
         # print(">> ", env[node])
     assert output is not None
     return output, params
@@ -222,7 +232,7 @@ def mrt_to_pytorch(graph: MultiHeadSymbol, params: ParametersT) -> torch.nn.Modu
 
             env: Dict[Symbol, F.Tensor] = {}
             for sym in sym2list(main_sym):
-                # print("<<", sym)
+                print("<<", sym)
                 if op.is_input(sym, self.params):
                     env[sym] = data_dict.get(sym.name, data)
                 elif op.is_param(sym, self.params):
@@ -236,8 +246,10 @@ def mrt_to_pytorch(graph: MultiHeadSymbol, params: ParametersT) -> torch.nn.Modu
                         args = [ args[0], args[3], args[4], args[1], args[2] ]
                     if sym.op_name in [CONV2D, MAX_POOL2D]:
                         attrs["stride"] = attrs.pop("strides")
+                    if sym.op_name == CONCAT:
+                        args = [ args, ]
                     env[sym] = MRT_TORCH_OP_MAP[sym.op_name](*args, **attrs)
-                # print(">>", env[sym].flatten()[:5])
+                #  print(">>", env[sym].flatten()[:5])
             return env[main_sym]
 
     return MRTModule(graph, params)
