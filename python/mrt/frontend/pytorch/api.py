@@ -40,6 +40,9 @@ TORCH_MRT_OP_MAP = {
 
         "relu.default": _T(RELU, 1),
         "relu_.default": _T(RELU, 1),
+        "silu_.default": _T(SILU, 1),
+
+        "sigmoid.default": _T(SIGMOID, 1),
 
         "adaptive_avg_pool2d.default": _T(ADAPTIVE_AVG_POOL2D, 1, [ Attr("output_size", (1,1)) ]),
         "max_pool2d.default": _T(MAX_POOL2D, 1, [
@@ -48,6 +51,7 @@ TORCH_MRT_OP_MAP = {
             Attr("padding", (0,0)) ]),
 
         "add_.Tensor": _T(ADD, 2),
+        "mul.Tensor": _T(MUL, 2),
 
         "flatten.using_ints": _T(FLATTEN, 1, [ Attr("start_dim", 1), Attr("end_dim", -1) ]),
         "dropout.default": _T(DROP_OUT, 1, [
@@ -55,11 +59,18 @@ TORCH_MRT_OP_MAP = {
             Attr("training", False),
             Attr("inplace", False),
             ]),
+        "dropout_.default": _T(DROP_OUT, 1, [
+            Attr("p", 0.5),
+            Attr("training", False),
+            Attr("inplace", True),
+            ]),
         }
 MRT_TORCH_OP_MAP = {
         TUPLE: lambda *args: [ *args ],
 
         RELU: F.relu,
+        SILU: F.silu,
+        SIGMOID: F.sigmoid,
         DENSE: F.linear,
         CONV2D: F.conv2d,
         BATCH_NORM: F.batch_norm,
@@ -70,6 +81,7 @@ MRT_TORCH_OP_MAP = {
         FLATTEN: torch.flatten,
 
         ADD: torch.add,
+        MUL: torch.mul,
         DROP_OUT: F.dropout,
         }
 
