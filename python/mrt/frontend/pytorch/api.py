@@ -50,6 +50,11 @@ TORCH_MRT_OP_MAP = {
         "add_.Tensor": _T(ADD, 2),
 
         "flatten.using_ints": _T(FLATTEN, 1, [ Attr("start_dim", 1), Attr("end_dim", -1) ]),
+        "dropout.default": _T(DROP_OUT, 1, [
+            Attr("p", 0.5),
+            Attr("training", False),
+            Attr("inplace", False),
+            ]),
         }
 MRT_TORCH_OP_MAP = {
         TUPLE: lambda *args: [ *args ],
@@ -65,6 +70,7 @@ MRT_TORCH_OP_MAP = {
         FLATTEN: torch.flatten,
 
         ADD: torch.add,
+        DROP_OUT: F.dropout,
         }
 
 def create_parameters(ep: torch.export.ExportedProgram):
