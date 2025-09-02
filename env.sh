@@ -4,7 +4,15 @@
 # Usage: source python-env.sh
 
 # Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Check ZSH / BASH
+if [[ -n "$BASH_VERSION" ]]; then
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+elif [[ -n "$ZSH_VERSION" ]]; then
+    SCRIPT_PATH="$0"
+else
+    SCRIPT_PATH="$0"
+fi
+SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_PATH}")" && pwd)"
 
 # Add the python directory to PYTHONPATH
 PYTHON_DIR="${SCRIPT_DIR}/python"
