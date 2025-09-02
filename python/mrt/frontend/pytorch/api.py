@@ -50,8 +50,10 @@ TORCH_MRT_OP_MAP = {
         "mul.Tensor": _T(MUL, 2),
 
         "flatten.using_ints": _T(FLATTEN, 1, [ Attr("start_dim", 1), Attr("end_dim", -1) ]),
-        "dropout.default": _T(DROP_OUT, 1),
-        "dropout_.default": _T(DROP_OUT, 1),
+        "dropout.default": _T(DROP_OUT, 1, [
+            Attr("p", 0.5), Attr("training", True), Attr("inplace", False), ]),
+        "dropout_.default": _T(DROP_OUT, 1, [
+            Attr("p", 0.5), Attr("training", True), Attr("inplace", False), ]),
         "cat.default": _T(CONCAT, 1, [ Attr("dim", 0) ]),
         "view.default": _T(RESHAPE, 1, [ Attr("shape", ()) ]),
         "transpose.int": _T(TRANSPOSE, 1, [ Attr("dim0", 0), Attr("dim1", 0) ]),
@@ -158,6 +160,11 @@ def pytorch_to_mrt(
     nodes: typing.List[fx.Node] = ep.graph.nodes
     for node in nodes:
         print("process: ", node.name, [a for a in node.args])
+        if node.op not in [ "output", ]:
+            meta_data = node.meta["tensor_meta"]
+            shape = [str(s) for s in meta_data.shape]
+            dtype = convert_torch_dtype(meta_data.dtype)
+
         args = [_retrieve_args(a) for a in node.args]
         attrs = {}
         func_name = None
@@ -168,9 +175,7 @@ def pytorch_to_mrt(
                 continue
 
             if node.name not in param_vars: # input
-                meta = node.meta["tensor_meta"]
-                env[node] = op.variable(
-                        node.name, meta.shape, meta.dtype)
+                env[node] = op.variable(node.name, shape, dtype)
             else:
                 env[node] = param_vars[node.name]
         elif node.op == "output":
@@ -196,7 +201,10 @@ def pytorch_to_mrt(
             args = [a for a in args[:mapper.arg_size] if a is not None]
             if mapper.op_name == CONCAT:
                 args = args[0]
-            env[node] = op._new_op(mapper.op_name, *args, name=node.name, **attrs)
+            env[node] = op._new_op(
+                    mapper.op_name, *args,
+                    name=node.name, extra_attrs={ "shape": shape, "dtype": dtype },
+                    **attrs)
         else:
             raise ValueError(f"Unsupported op {node.op}")
 

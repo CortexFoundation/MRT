@@ -3,7 +3,6 @@ import numpy as np
 
 from mrt.mir.symbol import *
 from mrt.mir.opns import *
-from mrt.frontend.tvm.relax import symbol2expr
 from mrt.frontend.tvm import types, relax
 from mrt.frontend.tvm import vm
 
@@ -38,7 +37,6 @@ def run_single(
 
     params = { c.name: args_data[i] for i, c in enumerate(sym.args) }
     mod = relax.graph2mod(sym, params)
-    # expr = symbol2expr(sym)
     return vm.infer(mod, params, **kwargs)
 
 def _mx_executor(sym: Symbol, inputs):
