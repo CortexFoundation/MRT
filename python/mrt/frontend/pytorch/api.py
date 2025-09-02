@@ -29,14 +29,10 @@ class _T:
 TORCH_MRT_OP_MAP = {
         "linear.default": _T(DENSE, 3),
         "conv2d.default": _T(CONV2D, 3, [
-            Attr("strides", (1,1)),
-            Attr("padding", (0,0)),
-            Attr("dilation", (1, 1)),
-            Attr("groups", 1)]),
+            Attr("strides", (1,1)), Attr("padding", (0,0)),
+            Attr("dilation", (1, 1)), Attr("groups", 1)]),
         "batch_norm.default": _T(BATCH_NORM, 5, [
-            Attr("training", False),
-            Attr("momentum", 0.1),
-            Attr("eps", 1e-5) ]),
+            Attr("training", False), Attr("momentum", 0.1), Attr("eps", 1e-5) ]),
 
         "relu.default": _T(RELU, 1),
         "relu_.default": _T(RELU, 1),
@@ -47,12 +43,10 @@ TORCH_MRT_OP_MAP = {
 
         "adaptive_avg_pool2d.default": _T(ADAPTIVE_AVG_POOL2D, 1, [ Attr("output_size", (1,1)) ]),
         "max_pool2d.default": _T(MAX_POOL2D, 1, [
-            Attr("kernel_size", (1,1)),
-            Attr("strides", (1,1)),
-            Attr("padding", (0,0)) ]),
+            Attr("kernel_size", (1,1)), Attr("strides", (1,1)), Attr("padding", (0,0)) ]),
+        "mean.dim": _T(MEAN, 1, [ Attr("dim", None), Attr("keepdim", False) ]),
 
-        "add.Tensor": _T(ADD, 2),
-        "add_.Tensor": _T(ADD, 2),
+        "add.Tensor": _T(ADD, 2), "add_.Tensor": _T(ADD, 2),
         "mul.Tensor": _T(MUL, 2),
 
         "flatten.using_ints": _T(FLATTEN, 1, [ Attr("start_dim", 1), Attr("end_dim", -1) ]),
@@ -62,9 +56,9 @@ TORCH_MRT_OP_MAP = {
         "view.default": _T(RESHAPE, 1, [ Attr("shape", ()) ]),
         "transpose.int": _T(TRANSPOSE, 1, [ Attr("dim0", 0), Attr("dim1", 0) ]),
         "contiguous.default": _T(PASS, 1),
+
         "chunk.default": _T(SPLIT, 1, [ Attr("chunks", 1), Attr("dim", 0) ]),
         "getitem": _T(TUPLE_GET_ITEM, 1, [ Attr("index", 0) ]),
-        "mean.dim": _T(MEAN, 1, [ Attr("dim", None), Attr("keepdim", False) ]),
         }
 MRT_TORCH_OP_MAP = {
         TUPLE: lambda *args: [ *args ],
