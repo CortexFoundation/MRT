@@ -33,6 +33,8 @@ TORCH_MRT_OP_MAP = {
             Attr("dilation", (1, 1)), Attr("groups", 1)]),
         "batch_norm.default": _T(BATCH_NORM, 5, [
             Attr("training", False), Attr("momentum", 0.1), Attr("eps", 1e-5) ]),
+        "_native_batch_norm_legit_no_training.default": _T(BATCH_NORM, 5, [
+            Attr("momentum", 0.1), Attr("eps", 1e-5) ]),
 
         "relu.default": _T(RELU, 1),
         "relu_.default": _T(RELU, 1),
@@ -160,7 +162,8 @@ def pytorch_to_mrt(
     nodes: typing.List[fx.Node] = ep.graph.nodes
     for node in nodes:
         print("process: ", node.name, [a for a in node.args])
-        if node.op not in [ "output", ]:
+        shape, dtype = None, None
+        if "tensor_meta" in node.meta:
             meta_data = node.meta["tensor_meta"]
             shape = [str(s) for s in meta_data.shape]
             dtype = convert_torch_dtype(meta_data.dtype)
