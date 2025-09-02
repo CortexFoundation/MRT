@@ -277,6 +277,34 @@ class Symbol(_BaseSymbol):
     def hash(self) -> int:
         return hash(str(self))
 
+# class Convolution2D(Symbol):
+#     strides: typing.Tuple[int, int]
+
+# class Dropout(Symbol):
+#     eps: float = 1e-5
+
+# class Pass:
+#     symbol: Symbol
+
+#     def visit(self, op: Symbol):
+#         env: typing.Dict[Symbol, Symbol] = {}
+#         for sym in sym2list(self.symbol):
+#             out = getattr(self, f"visit_{op.op_name}")(op) or op
+#             assert isinstance(sym, Symbol)
+#             env[sym] = out
+#         return env[op]
+
+# def _default_visit_op(op):
+#     return op
+
+# for op in op_list:
+#     setattr(Pass, f"visit_{op.op_name}", _default_visit_op)
+
+# class FuseDropoutPass(Pass):
+#     def visit_dropout(self, op: Dropout):
+#         op.eps
+#         return op.args[0]
+
 def _topo_sort(symbol: Symbol, sym_list: typing.List[Symbol]):
     assert isinstance(symbol, Symbol), \
             f"({type(symbol).__name__}){str(symbol)}"
@@ -447,6 +475,7 @@ def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
 #          return MultiHeadSymbol(**{ name: symbol })
 
 class MultiHeadSymbol(dict):
+    """ { "main": F(X) } """
     origin: typing.Optional[Symbol] = None
 
     @classmethod

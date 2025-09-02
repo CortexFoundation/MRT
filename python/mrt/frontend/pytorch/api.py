@@ -181,7 +181,7 @@ def pytorch_to_mrt(
                 env[node] = op.variable(node.name, shape, dtype)
             else:
                 env[node] = param_vars[node.name]
-        elif node.op == "output":
+        elif node.op == "output": # [[ out1, out2, out3 ]]
             assert len(args) == 1
             env[node] = args[0]
             assert len(func_names) == len(args[0])
@@ -204,10 +204,15 @@ def pytorch_to_mrt(
             args = [a for a in args[:mapper.arg_size] if a is not None]
             if mapper.op_name == CONCAT:
                 args = args[0]
-            env[node] = op._new_op(
-                    mapper.op_name, *args,
-                    name=node.name, extra_attrs={ "shape": shape, "dtype": dtype },
-                    **attrs)
+
+            if mapper.op_name == TUPLE_GET_ITEM and args[0].op_name == BATCH_NORM:
+                out = args[0]
+            else:
+                out = op._new_op(
+                        mapper.op_name, *args,
+                        name=node.name, extra_attrs={ "shape": shape, "dtype": dtype },
+                        **attrs)
+            env[node] = out
         else:
             raise ValueError(f"Unsupported op {node.op}")
 
@@ -233,11 +238,12 @@ def mrt_to_pytorch(graph: MultiHeadSymbol, params: ParametersT) -> torch.nn.Modu
 
         def forward(self, data, **data_dict):
             # Get the main symbol (assuming single output for now)
+            # TODO: return all graph output
             main_sym = self.graph["main"]
 
             env: Dict[Symbol, F.Tensor] = {}
             for sym in sym2list(main_sym):
-                print("<<", sym)
+                #  print("<<", sym)
                 if op.is_input(sym, self.params):
                     env[sym] = data_dict.get(sym.name, data)
                 elif op.is_param(sym, self.params):
@@ -254,7 +260,7 @@ def mrt_to_pytorch(graph: MultiHeadSymbol, params: ParametersT) -> torch.nn.Modu
                     if sym.op_name == CONCAT:
                         args = [ args, ]
                     env[sym] = MRT_TORCH_OP_MAP[sym.op_name](*args, **attrs)
-                #  print(">>", env[sym].flatten()[:5])
+                #  print(">>", env[sym].size(), env[sym].flatten()[:5])
             return env[main_sym]
 
     return MRTModule(graph, params)

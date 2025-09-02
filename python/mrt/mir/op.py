@@ -58,6 +58,13 @@ def _register_op(op_name):
 Tuple = _register_op(TUPLE)
 TupleGetItem = _register_op(TUPLE_GET_ITEM)
 
+# class Conv2D(Symbol):
+#     strides:
+
+# TODO: define op function
+# def conv2d(X, weight, bias, strides=(1,1)...):
+#   return Symbol(args=[X, weight, bias],
+#           attrs={ "strides": strides })
 nn_conv2d = _register_op(CONV2D)
 nn_dense = _register_op(DENSE)
 nn_batch_norm = _register_op(BATCH_NORM)
