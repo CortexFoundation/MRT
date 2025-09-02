@@ -1,8 +1,8 @@
-# MRT (Model Representation Template)
+# MRT (Model Representation Tools)
 
 ## Project Overview
 
-MRT is a Python-based framework for machine learning model quantization and compilation. It is built on top of CVMRuntime and is designed to convert pre-trained models into CVM-Compatiable formats, including fixed-point representations and zero-knowledge (ZK) circuits for verifiable inference.
+MRT is a Python-based framework for machine learning model quantization and compilation. It is built on top of [CVMRuntime](https://github.com/CortexFoundation/cvm-runtime) and is designed to convert pre-trained models into CVM-Compatiable formats, including fixed-point representations and zero-knowledge (ZK) circuits for verifiable inference.
 
 The core of the framework is the `Trace` object, which represents the computational graph of a model and provides a high-level API for applying various transformations, such as quantization, calibration, and operator fusion.
 
@@ -49,7 +49,7 @@ Run individual tests:
 ```bash
 # Frontend tests
 python tests/frontend/test_frontend_loading.py
-python tests/frontend/test.pytorch.py
+python tests/frontend/pytorch/test.pytorch.py
 
 # Classification model tests  
 python tests/classification/test.resnet.py
@@ -62,7 +62,7 @@ python tests/test.relax.py
 python tests/test.template.py
 
 # PyTest
-pytest tests/frontend/test_pytorch.py::test_conv_model -v
+pytest tests/frontend/pytorch/test_pytorch.py::test_conv_model -v
 ```
 
 All test files should be located in the `tests/` directory with subdirectories for different categories (frontend, classification, detection, nlp).
