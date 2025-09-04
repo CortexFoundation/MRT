@@ -155,8 +155,8 @@ def test_type_infer():
 
 if __name__ == "__main__":
     print("Testing PyTorch to MRT conversion...")
-    # test_simple_model()
-    #  print("\n" + "="*50 + "\n")
+    test_simple_model()
+    print("\n" + "="*50 + "\n")
     test_conv_model()  # Conv operations now supported
     # print("\n" + "="*50 + "\n")
     # test_type_infer()  # Type inference not yet implemented

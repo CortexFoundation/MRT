@@ -6,7 +6,7 @@ and vice versa, enabling PyTorch models to benefit from MRT's quantization
 and optimization capabilities.
 """
 
-from .api import pytorch_to_mrt, mrt_to_pytorch, type_infer
+from .converter import pytorch_to_mrt, mrt_to_pytorch, type_infer
 
 # Expose the required functions for the frontend API
 from_frontend = pytorch_to_mrt

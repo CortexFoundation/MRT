@@ -77,16 +77,8 @@ Git commit message should be simple, and add core feature name at the begin, exa
 
 ### Code
 
-*   IMPORTANT!!! code should be simply, reduce duplicated codes in programming.
-*   IMPORTANT!!! Don't consider For simplicity situations, write code in robust, complete, correct version.
-*   write code less than 50 lines once a time, if neccesary.
-*   for large changes, split into many segements and functions, and require for user confirmation.
-
 *   The project follows standard Python coding conventions (PEP 8).
 *   Print essencial info and exit immediately if any unsupported operation/corner case is performed.
-*   use assert to check most scenarios.
-*   Add PYTHONPATH with python dir in script.
-*   Remove unvisable char(whitespace etc) in empty line.
 
 ### Testing
 

@@ -2,20 +2,21 @@ import typing
 import torch
 from torch import fx
 import numpy as np
-from collections import ChainMap, OrderedDict, namedtuple
+from collections import ChainMap, OrderedDict
+from collections import namedtuple
 from dataclasses import dataclass, field
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
 
-from mrt.mir.symbol import Symbol, MultiHeadSymbol, sym2list
+from mrt.mir.symbol import Symbol, MultiHeadSymbol, sym2list, transform
 from mrt.mir import op
 from mrt.mir.opns import *
 from mrt.common.types import ParametersT
 from mrt.common.utils import N
-from .types import convert_to_py, convert_torch_dtype
+from .types import data_to_mrt
 
-__all__ = ["pytorch_to_mrt", "mrt_to_pytorch", "from_pytorch", "type_infer"]
+__all__ = ["pytorch_to_mrt", "mrt_to_pytorch", "type_infer"]
 
 Attr = namedtuple('Attr', [ 'name', 'default' ])
 
@@ -123,12 +124,8 @@ def create_parameters(ep: torch.export.ExportedProgram):
             torch_shape = ep.state_dict[spec.target].shape
             torch_dtype = ep.state_dict[spec.target].dtype
 
-
-        dshape = [
-            str(s) if isinstance(s, torch.SymInt) else s
-            for s in torch_shape
-        ]
-        dtype = convert_torch_dtype(torch_dtype)
+        dshape = data_to_mrt(torch_shape)
+        dtype = data_to_mrt(torch_dtype)
 
         out = op.variable(name_hint, dshape, dtype)
         params[name_hint] = to_bind_parameters[spec.target].detach().numpy().astype(dtype)
@@ -161,12 +158,16 @@ def pytorch_to_mrt(
 
     nodes: typing.List[fx.Node] = ep.graph.nodes
     for node in nodes:
-        print("process: ", node.name, [a for a in node.args])
+        #  print("process: ", node.name, [a for a in node.args])
         shape, dtype = None, None
         if "tensor_meta" in node.meta:
             meta_data = node.meta["tensor_meta"]
-            shape = [str(s) for s in meta_data.shape]
-            dtype = convert_torch_dtype(meta_data.dtype)
+            shape = data_to_mrt(meta_data.shape)
+            #  shape = [str(s) if isinstance(s, torch.SymInt) else int(s) \
+            #          for s in meta_data.shape]
+            dtype = data_to_mrt(meta_data.dtype)
+        #  else:
+        #      print(node.name, "has no tensor meta")
 
         args = [_retrieve_args(a) for a in node.args]
         attrs = {}
@@ -230,40 +231,76 @@ def mrt_to_pytorch(graph: MultiHeadSymbol, params: ParametersT) -> torch.nn.Modu
             super().__init__()
             self.graph = graph
             self.params = params
+            assert len(self.graph) == 1
+            self.sym_list = sym2list(graph["main"])
+
+            #  for sym in self.sym_list:
+            #      assert sym.op_name in MRT_TORCH_MOD_MAP, sym
+            #      setattr(self, sym.name, MRT_TORCH_MOD_MAP[sym.op_name](**sym.attrs))
 
             # Register parameters as buffers
             for name, value in params.items():
                 assert isinstance(value, np.ndarray)
-                self.register_buffer(name, torch.from_numpy(value))
+                #  self.register_buffer(name, None)
+                self.register_parameter(name, torch.nn.Parameter(
+                    torch.from_numpy(value), requires_grad=False))
 
         def forward(self, data, **data_dict):
             # Get the main symbol (assuming single output for now)
             # TODO: return all graph output
-            main_sym = self.graph["main"]
-
-            env: Dict[Symbol, F.Tensor] = {}
-            for sym in sym2list(main_sym):
+            env: Dict[str, F.Tensor] = {}
+            for sym in self.sym_list:
+                sn = sym.name
                 #  print("<<", sym)
                 if op.is_input(sym, self.params):
-                    env[sym] = data_dict.get(sym.name, data)
+                    env[sn] = data_dict.get(sn, data)
                 elif op.is_param(sym, self.params):
-                    env[sym] = getattr(self, sym.name)
+                    env[sn] = getattr(self, sn)
                 else:
-                    args = [env[a] for a in sym.args]
-                    attrs = {k: v for k, v in sym.attrs.items()}
-                    if sym.op_name in [BATCH_NORM]:
-                        args = [*args, None, None, None, None][:5]
-                        # reorder in [input, running_mean, running_var, weight, bias]
-                        args = [ args[0], args[3], args[4], args[1], args[2] ]
-                    if sym.op_name in [CONV2D, MAX_POOL2D]:
-                        attrs["stride"] = attrs.pop("strides")
-                    if sym.op_name == CONCAT:
-                        args = [ args, ]
-                    env[sym] = MRT_TORCH_OP_MAP[sym.op_name](*args, **attrs)
-                #  print(">>", env[sym].size(), env[sym].flatten()[:5])
-            return env[main_sym]
+                    env[sn] = _infer_single_op(sym, env)
+                #  print(">>", env[sn].size(), env[sn].dtype, env[sn].flatten()[:5])
+            return env[self.graph["main"].name]
 
-    return MRTModule(graph, params)
+    torch_model = MRTModule(graph, params)
+    #  print(torch_model.state_dict().keys())
+    #  torch_model.load_state_dict({k: torch.from_numpy(v) for k, v in params.items()})
+    return torch_model
+
+def _infer_single_op(sym: Symbol, env: typing.Dict[str, F.Tensor]) -> F.Tensor:
+    assert op.is_operator(sym), sym
+
+    args = [env[a.name] for a in sym.args]
+    attrs = {k: v for k, v in sym.attrs.items()}
+    if sym.op_name in [BATCH_NORM]:
+        args = [*args, None, None, None, None][:5]
+        # reorder in [input, running_mean, running_var, weight, bias]
+        args = [ args[0], args[3], args[4], args[1], args[2] ]
+    if sym.op_name in [CONV2D, MAX_POOL2D]:
+        attrs["stride"] = attrs.pop("strides")
+    if sym.op_name == CONCAT:
+        args = [ args, ]
+    out = MRT_TORCH_OP_MAP[sym.op_name](*args, **attrs)
+    return out
 
 def type_infer(symbol: Symbol) -> Symbol:
-    raise RuntimeError("")
+    """Infer shape and dtype for all symbols in the graph.
+
+    This function works by using torch.Tensor inference.
+    """
+    env: Dict[str, F.Tensor] = {}
+
+    def _infer_type(sym: Symbol):
+        if op.is_variable(sym):
+            out = torch.randn(sym.shape)
+        else:
+            out = _infer_single_op(sym, env)
+            if sym.shape is None:
+                sym.shape = data_to_mrt(out.shape)
+                sym.dtype = data_to_mrt(out.dtype)
+            else:
+                assert sym.shape == data_to_mrt(out.shape), f"{sym.shape} vs. {out.shape}"
+                assert sym.dtype == data_to_mrt(out.dtype), f"{sym.dtype} vs. {out.dtype}"
+        env[sym.name] = out
+
+    out = transform(symbol, _infer_type)
+    return out
