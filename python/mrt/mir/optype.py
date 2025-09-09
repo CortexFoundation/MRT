@@ -2,6 +2,7 @@ import typing
 
 from mrt.common.types import *
 from mrt.common import config
+from mrt.frontend import api
 #  from mrt.mir import op, opns
 #  from mrt.symbol import Symbol, transform
 
@@ -10,7 +11,6 @@ from . import op, opns
 from .symbol import Symbol, transform
 
 InferTypeT = typing.Callable[[Symbol], Symbol]
-_DEFAULT_TYPE_INFER = None
 _INFER_TYPE_REG: typing.Dict[str, InferTypeT] = {}
 
 def register_type_infer(
@@ -29,7 +29,7 @@ def infer_single(symbol: Symbol) -> Symbol:
     C = config.LogConfig.G()
 
     out = op.retrieve_operator(symbol)
-    _infer = _INFER_TYPE_REG.get(out.op_name, _DEFAULT_TYPE_INFER)
+    _infer = _INFER_TYPE_REG.get(out.op_name, api.type_infer)
     assert _infer is not None
 
     if symbol.is_near(*C.log_type_infer):

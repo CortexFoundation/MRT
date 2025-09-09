@@ -30,7 +30,8 @@ def run_executor(
         data_dict[k] = torch.from_numpy(v).to(device)
     if data is not None:
         data = torch.from_numpy(data).to(device)
-    out = vm(data, **data_dict)
+    with torch.no_grad():
+        out = vm(data, **data_dict)
     return data_to_mrt(out.detach().cpu())
 
 def infer(graph: MultiHeadSymbol, params: ParametersT,

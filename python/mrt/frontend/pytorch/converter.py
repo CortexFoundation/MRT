@@ -139,8 +139,9 @@ def pytorch_to_mrt(
         ep: torch.export.ExportedProgram,
         func_names: typing.List[str] = [ "main", ]
         ) -> typing.Tuple[MultiHeadSymbol, ParametersT]:
-    env: typing.Dict[fx.Node, Symbol] = {}
+    env: typing.Dict[torch.Node, Symbol] = {}
 
+    assert isinstance(ep, torch.export.ExportedProgram), f"input not torch ExportedProgram, but {type(ep)}"
     param_vars, params = create_parameters(ep)
 
     def _retrieve_args(node):
@@ -163,8 +164,6 @@ def pytorch_to_mrt(
         if "tensor_meta" in node.meta:
             meta_data = node.meta["tensor_meta"]
             shape = data_to_mrt(meta_data.shape)
-            #  shape = [str(s) if isinstance(s, torch.SymInt) else int(s) \
-            #          for s in meta_data.shape]
             dtype = data_to_mrt(meta_data.dtype)
         #  else:
         #      print(node.name, "has no tensor meta")
@@ -284,8 +283,6 @@ def _infer_single_op(sym: Symbol, env: typing.Dict[str, F.Tensor]) -> F.Tensor:
 
 def type_infer(symbol: Symbol) -> Symbol:
     """Infer shape and dtype for all symbols in the graph.
-
-    This function works by using torch.Tensor inference.
     """
     env: Dict[str, F.Tensor] = {}
 

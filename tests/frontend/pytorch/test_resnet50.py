@@ -162,4 +162,4 @@ if __name__ == "__main__":
     print("\n" + "="*60 + "\n")
 
     test_resnet50_infer()
-    #  test_resnet50_type_infer()
+    test_resnet50_type_infer()
