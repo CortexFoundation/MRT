@@ -12,6 +12,7 @@ from .symbol import Symbol, transform
 
 InferTypeT = typing.Callable[[Symbol], Symbol]
 _INFER_TYPE_REG: typing.Dict[str, InferTypeT] = {}
+_DEFAULT_TYPE_INFER: InferTypeT = lambda x: x
 
 def register_type_infer(
         *op_names,

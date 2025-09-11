@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import math
 import typing
@@ -19,19 +17,47 @@ MRT_DATASET_ROOT = path.expanduser("~/.mxnet/datasets")
 if not path.exists(MRT_DATASET_ROOT):
     os.makedirs(MRT_DATASET_ROOT)
 
-class N:
-    def __init__(self, name=""):
-        self.counter = 0
-        self.scope_name = name
-        self.lock = threading.Lock()
-        self.last_scope = N.__GLOBAL_INSTANCE__
+SelfScope = typing.TypeVar("SelfScope", bound="Scope")
 
-    def __enter__(self):
-        self._set_name_scope(self)
+class Scope:
+    """
+        1. Scope may have many instance
+        2. Scope can enter/exit recursively
+        3. Scope has Global instance by default.
+    """
+    __CURR_GLOBAL_INSTANCE__: SelfScope | None = None
+
+    def __init__(self):
+        """ Scope will auto record current global scope. """
+        self.last_scope = self.__CURR_GLOBAL_INSTANCE__
+
+    def __enter__(self) -> SelfScope:
+        self.register_global(self)
         return self
 
     def __exit__(self, *args):
-        self._set_name_scope(self.last_scope)
+        """ Trace back last scope """
+        self.register_global(self.last_scope)
+
+    @classmethod
+    def register_global(cls, ins: SelfScope) -> SelfScope:
+        """ register global scope """
+        cls.__CURR_GLOBAL_INSTANCE__ = ins
+        return ins
+
+    @classmethod
+    def G(cls) -> SelfScope:
+        """ Get Current Global Instance. """
+        sc = cls.__CURR_GLOBAL_INSTANCE__ or cls()
+        sc.register_global(sc)
+        return sc
+
+class N(Scope):
+    def __init__(self, name=""):
+        super().__init__()
+        self.counter = 0
+        self.scope_name = name
+        self.lock = threading.Lock()
 
     def _alloc_name(self, prefix, suffix) -> str:
         with self.lock:
@@ -42,29 +68,10 @@ class N:
             name = "{}.{}".format(self.scope_name, name)
         return name
 
-    __GLOBAL_INSTANCE__ = None
-
     @staticmethod
-    def _set_name_scope(ins):
-        N.__GLOBAL_INSTANCE__ = ins
-        return ins
-
-    @staticmethod
-    def n(prefix=None, suffix=None) -> str:
-        ins = N.__GLOBAL_INSTANCE__
-        if ins is None:
-            ins = N.register_global_scope()
-        prefix = "%" if prefix is None else prefix
-        suffix = "" if suffix is None else suffix
+    def n(prefix="%", suffix="") -> str:
+        ins: N = N.G()
         return ins._alloc_name(prefix, suffix)
-
-    @staticmethod
-    def register_global_scope(name=""):
-        return N._set_name_scope(N(name))
-
-N.register_global_scope()
-
-# N.register_global_scope()
 
 def extend_fname(prefix, with_ext=False):
     """ Get the precision of the data.
@@ -97,6 +104,34 @@ def dataclass_to_dict(dc: dataclass, check_repr=False) -> dict:
             for f in fields(dc) if _check(f)}
     # return dict((f.name, getattr(dc, f.name)) \
     #         for f in fields(dc))
+
+def load_dc_attrs_from_env(dc: dataclass) -> dict:
+    """ load dataclass config from environment variables.
+        1. env key is uppercase of field name.
+        2. multi-value is splited with comma for list types.
+    """
+    type_hints = typing.get_type_hints(dc)
+    new_attrs = {}
+    for f in fields(dc):
+        env_key = f.name.upper()
+        if env_key not in os.environ:
+            continue
+
+        env_val = os.environ[env_key]
+        field_type = type_hints[f.name]
+        origin = typing.get_origin(field_type) or field_type
+        if origin is list:
+            val = env_val.split(',')
+        elif origin is bool:
+            val = env_val.lower() in ['true', '1', 't', 'y', 'yes']
+        elif origin is int:
+            val = int(env_val)
+        elif origin is float:
+            val = float(env_val)
+        else: # str or other types
+            val = env_val
+        new_attrs[f.name] = val
+    return new_attrs
 
 def product(arr_like):
     """ calculate production for input array.

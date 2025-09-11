@@ -5,42 +5,24 @@ from dataclasses import dataclass, field
 
 from . import utils
 
-T = typing.TypeVar("T")
+SelfConfig = typing.TypeVar("T", bound="_BaseConfig")
 
 @dataclass
-class _BaseConfig:
-    _last_scope: _BaseConfig | typing.Type[_BaseConfig] | None = None
-    __GLOBAL__: typing.ClassVar[_BaseConfig | typing.Type[_BaseConfig] | None] = None
-
-    def __post_init__(self):
-        self._last_scope = self.__GLOBAL__
-
-    @classmethod
-    def G(cls: typing.Type[T]) -> T:
-        return cls.__GLOBAL__ or cls() # type: ignore
-
-    @classmethod
-    def _set_scope(cls: typing.Type[T], ins) -> T:
-        assert isinstance(ins, cls)
-        cls.__GLOBAL__ = ins # type: ignore
-        return ins
-
-    def __enter__(self):
-        return self._set_scope(self)
-
-    def __exit__(self, *_) -> bool:
-        self._set_scope(self._last_scope)
-        # return false to indicate throw exception
-        return False
-
-    def register_global(self):
-        return self._set_scope(self)
-
-    def mutate(self, **new_attrs):
+class _BaseConfig(utils.Scope):
+    def copy(self, **new_attrs) -> SelfConfig:
         attrs = utils.dataclass_to_dict(self)
         attrs.update(new_attrs)
         return type(self)(**attrs)
 
+    def mutate(self, **new_attrs) -> SelfConfig:
+        for k, v in new_attrs.items():
+            setattr(self, k, v)
+        return self
+
+    def load_from_env(self) -> SelfConfig:
+        """ load config from env. """
+        attrs = utils.load_dc_attrs_from_env(type(self))
+        return self.mutate(**attrs)
 
 @dataclass
 class PassConfig(_BaseConfig):
@@ -61,6 +43,14 @@ class MRTConfig(_BaseConfig):
         Invalid const size may leads to tvm compile failed:
             Memory verification failed
     """
+
+    frontend: str = "pytorch"
+    """ ML Framework to be used as MRT frontend.
+
+        Including model import, inference, etc.
+    """
+
+MRTConfig.G().load_from_env()
 
 @dataclass
 class LogConfig(_BaseConfig):

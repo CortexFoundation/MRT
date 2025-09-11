@@ -5,6 +5,7 @@ from functools import wraps
 
 from mrt.mir.symbol import *
 from mrt.common.types import *
+from mrt.common.config import MRTConfig
 
 class Singleton(object):
     def __new__(cls, *args, **kw):
@@ -18,17 +19,21 @@ class DynamicModule(Singleton):
         self._funcs = {}
 
     def load_mod(self, frontend):
+        #  print(frontend)
         try:
-            frontend_module = importlib.import_module(f".{FRONTEND}", package="mrt.frontend")
+            frontend_module = importlib.import_module(f".{frontend}", package="mrt.frontend")
         except ImportError as e:
-            print(f"Error: Frontend '{FRONTEND}' cannot be imported: {e}")
+            print(f"Error: Frontend '{frontend}' cannot be imported: {e}")
             return
+
+        #  print("load module:", frontend_module)
 
         for f in self._funcs:
             if hasattr(frontend_module, f):
                 self._funcs[f] = getattr(frontend_module, f)
             else:
-                print(f"Error: function '{f}' not found in frontend '{FRONTEND}'")
+                print(f"Error: function '{f}' not found in frontend '{frontend}'")
+                #  raise ValueError(f)
 
         return self
 
@@ -39,6 +44,7 @@ class DynamicModule(Singleton):
         @wraps(func)
         def _func_impl(*args, **kwargs):
             assert self._funcs[fname] is not None, f"func:{fname} not registered in mod: {self._funcs.keys()}"
+            print(f"run {fname}")
             func(*args, **kwargs)
             return self._funcs[fname](*args, **kwargs)
         return _func_impl
@@ -102,6 +108,5 @@ def model_to_frontend(graph: MultiHeadSymbol, params: ParametersT,):
 def type_infer(symbol: Symbol) -> Symbol:
     """ Shape/DType Inference use Frontend API. """
 
-
-FRONTEND = os.environ.get("FRONTEND", "pytorch")
+FRONTEND = MRTConfig.G().frontend
 mod.load_mod(FRONTEND)

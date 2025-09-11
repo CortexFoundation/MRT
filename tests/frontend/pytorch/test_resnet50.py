@@ -151,13 +151,13 @@ def test_resnet50_type_infer():
     print("ResNet50 type inference test passed!")
 
 if __name__ == "__main__":
-    #  print("Testing ResNet50 operations...")
-    #  operations = test_resnet50_operations()
+    print("Testing ResNet50 operations...")
+    operations = test_resnet50_operations()
 
-    #  print("\n" + "="*60 + "\n")
+    print("\n" + "="*60 + "\n")
 
-    #  print("Testing ResNet50 conversion...")
-    #  test_resnet50_conversion()
+    print("Testing ResNet50 conversion...")
+    test_resnet50_conversion()
 
     print("\n" + "="*60 + "\n")
 

@@ -48,9 +48,9 @@ def _new_op(op_name, *args, extra_attrs=None, **attrs) -> Symbol:
             extra_attrs=extra_attrs or {})
 
 def _register_op(op_name):
-    from . import optype
     def _op(*args, **attrs) -> Symbol:
         op = _new_op(op_name, *args, **attrs)
+        from . import optype
         out = optype.infer_single(op)
         return out
     return _op
