@@ -1,4 +1,5 @@
 import typing
+import numpy as np
 from dataclasses import dataclass
 from . import opns
 from . import symbol
@@ -19,7 +20,6 @@ def _register_op_map(op_name: str): #, clss:typing.Any=None):
         return clss
     return _wrapper
 
-@_register_op_map(opns.CONV2D)
 @dataclass(init=False)
 class Conv2D(symbol.Symbol):
 
@@ -28,31 +28,40 @@ class Conv2D(symbol.Symbol):
     @property
     def strides(self) -> typing.Tuple[int, int]:
         default_val = (1,1)
-        return self._strides if self._strides else self.attrs['strides'] if 'strides' in self.attrs else default_val 
+        return self._strides if self._strides else self.attrs['strides'] if 'strides' in self.attrs else default_val
 
     @property
     def padding(self) -> typing.Tuple[int, int, int, int]:
         default_val = (0,0,0,0)
-        return self._padding if self._padding else self.attrs['padding'] if 'padding' in self.attrs else default_val 
+        return self._padding if self._padding else self.attrs['padding'] if 'padding' in self.attrs else default_val
 
     @property
     def dilation(self) -> typing.Tuple[int, int]:
         default_val = (1,1)
-        return self._ if self._ else self.attrs[''] if '' in self.attrs else default_val 
+        return self._dilation if self._dilation else self.attrs['dilation'] if 'dilation' in self.attrs else default_val
 
     @property
     def kernel_size(self) -> typing.Tuple[int, int]:
         default_val = (3,3)
-        return self._kernel_size if self._kernel_size else self.attrs['kernel_size'] if 'kernel_size' in self.attrs else default_val 
+        return self._kernel_size if self._kernel_size else self.attrs['kernel_size'] if 'kernel_size' in self.attrs else default_val
 
-    def __init__(self, name:str, **kwargs):
-        self.name = name
-        self.args = kwargs.pop('args', [])
-        self.attrs = kwargs.pop('attrs', {})
-        self.extra_attrs = {}
+    def __init__(self, name_or_inst: typing.Union[str, symbol.Symbol], **kwargs):
+        assert isinstance(name_or_inst, str) or isinstance(name_or_inst, symbol.Symbol)
+        if isinstance(name_or_inst, str):
+            self.name = name_or_inst
+            self.args = kwargs.pop('args', [])
+            self.attrs = kwargs.pop('attrs', {})
+            self.extra_attrs = {}
+        else:
+            # clone mode
+            self.name = name_or_inst.name
+            self.args = [a for a in name_or_inst.args]
+            self.attrs = {k: v for k, v in name_or_inst.attrs.items()}
+            self.extra_attrs = {k: v for k, v in name_or_inst.extra_attrs.items()}
 
         # TODO: what if strides not in attrs?
-        self._strides = self.attrs['strides']
+        if 'strides' in self.attrs:
+            self._strides = self.attrs['strides']
         if 'padding' in self.attrs:
             self._padding = self.attrs['padding']
         if 'dilation' in self.attrs:
@@ -61,7 +70,6 @@ class Conv2D(symbol.Symbol):
             self._kernel_size = self.attrs['kernel_size']
 
 
-@_register_op_map(opns.DROP_OUT)
 @dataclass(init=False)
 class Dropout(symbol.Symbol):
 
@@ -80,7 +88,6 @@ class Dropout(symbol.Symbol):
 
         self._rate = self.attrs['rate']
 
-@_register_op_map(opns.CLIP)
 @dataclass(init=False)
 class Clip(symbol.Symbol):
 
@@ -88,12 +95,12 @@ class Clip(symbol.Symbol):
     
     @property
     def min(self) -> float:
-        default_val = None
+        default_val = np.nan
         return self._min if self._min else self.attrs['min'] if 'min' in self.attrs else default_val
 
     @property
     def max(self) -> float:
-        default_val = None
+        default_val = np.nan
         return self._max if self._max else self.attrs['max'] if 'max' in self.attrs else default_val
 
     def __init__(self, name:str, **kwargs):
@@ -106,7 +113,6 @@ class Clip(symbol.Symbol):
         self._max = self.attrs['max']
 
 
-@_register_op_map(opns.BATCH_NORM)
 @dataclass(init=False)
 class BatchNorm(symbol.Symbol):
 
@@ -143,7 +149,6 @@ class BatchNorm(symbol.Symbol):
         self._center = self.attrs['center']
         self._scale = self.attrs['scale']
 
-@_register_op_map(opns.DENSE)
 @dataclass(init=False)
 class Dense(symbol.Symbol):
 
@@ -155,7 +160,6 @@ class Dense(symbol.Symbol):
         self.attrs = kwargs.pop('attrs', {})
         self.extra_attrs = {}
  
-@_register_op_map(opns.TUPLE_GET_ITEM)
 @dataclass(init=False)
 class TupleGetItem(symbol.Symbol):
 
@@ -174,7 +178,6 @@ class TupleGetItem(symbol.Symbol):
 
         self._index  = self.attrs['index']
 
-@_register_op_map(opns.MUL)
 @dataclass(init=False)
 class Multiply(symbol.Symbol):
 
@@ -186,3 +189,10 @@ class Multiply(symbol.Symbol):
         self.attrs = kwargs.pop('attrs', {})
         self.extra_attrs = {}
  
+_register_op_map(opns.CONV2D)(Conv2D)
+_register_op_map(opns.DROP_OUT)(Dropout)
+_register_op_map(opns.CLIP)(Clip)
+_register_op_map(opns.BATCH_NORM)(BatchNorm)
+_register_op_map(opns.DENSE)(Dense)
+_register_op_map(opns.TUPLE_GET_ITEM)(TupleGetItem)
+_register_op_map(opns.MUL)(Multiply)
