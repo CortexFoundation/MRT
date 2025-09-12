@@ -1,8 +1,8 @@
 """ MRT operator names """
 import typing
 
-MRT_OP_SET = set()
-def _register_op_list(*op_names: typing.List[str]):
+MRT_OP_SET: typing.Set[str] = set()
+def _register_op_list(*op_names: str):
     for op_name in op_names:
         if op_name not in MRT_OP_SET:
             MRT_OP_SET.add(op_name)
@@ -127,6 +127,6 @@ LUT = "mrt.lut"
 _register_op_list(REQUANT, PCLIP, RS_PCLIP, LUT)
 
 
-def Opname2Funcname(op_name: str):
+def Opname2Funcname(op_name: str) -> str:
     return op_name.replace('.', '_')
 #print('MRT_OP_SET:', MRT_OP_SET)

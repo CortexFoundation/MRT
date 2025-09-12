@@ -462,7 +462,7 @@ class MultiHeadSymbol(dict):
 
     @classmethod
     def from_tuple(cls, tuple_names, symbol):
-        assert symbol.is_op(TUPLE), symbol
+        assert symbol.is_op(opns.TUPLE), symbol
         mhs = cls(zip(tuple_names, symbol.args))
         mhs.origin = symbol
         return mhs

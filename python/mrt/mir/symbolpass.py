@@ -64,9 +64,9 @@ class FuseDropoutPass(SymbolPass):
 
 class FuseDividePass(SymbolPass):
     def visit_divide(self, sym: _symbol.Symbol) -> _symbol.Symbol:
-        if sym.op_name == opns.DIVIDE:
-            argA = self.args[0]
-            argB = self.args[1]
+        if sym.op_name == opns.DIV:
+            argA = sym.args[0]
+            argB = sym.args[1]
             assert self.is_param(argB), f'NotParam: {argB}'
             # TODO: fixit
             #argB = argB.from_np_data(1. / argB.numpy())
