@@ -19,7 +19,7 @@ from mrt.frontend.pytorch import vm
 from mrt.mir import helper, symbol as sx
 from mrt.mir import opns
 from mrt.mir import opclass
-from mrt.mir import symbolpass
+from mrt.mir import simple_pass
 
 def _get_alexnet_model():
     """Get Alexnet MRT Model"""
@@ -41,7 +41,7 @@ def _get_alexnet_model():
     mrt_graph, mrt_params = pytorch_to_mrt(ep)
     return mrt_graph, mrt_params
 
-def test_SymbolPass_FuseDropout(mrt_graph, mrt_params):
+def test_SimplePass_FuseDropout(mrt_graph, mrt_params):
     symbol = mrt_graph['main']
     #print(symbol)
 
@@ -54,7 +54,7 @@ def test_SymbolPass_FuseDropout(mrt_graph, mrt_params):
     assert dropout_op_cnt>0, f'original model dropout op cnt {dropout_op_cnt} == zero!'
 
     # init FuseDropout Passer and execute visit
-    tfs : symbolpass.FuseDropoutPass = symbolpass.FuseDropoutPass(symbol, {})
+    tfs : simple_pass.FuseDropoutPass = simple_pass.FuseDropoutPass(symbol)
     #print(getattr(tfs, f"visit_{opns.Opname2Funcname(opns.DROP_OUT)}"))
     symbol_passed = tfs.visit()
 
@@ -74,15 +74,76 @@ def test_SymbolPass_FuseDropout(mrt_graph, mrt_params):
 
     return True
 
+
+def test_SimplePass_CustomFunc(mrt_graph):
+    symbol = mrt_graph['main']
+
+    print('\n=== Before CustomFunc Pass ===')
+    symlist = sx.sym2list(symbol)
+
+    tfs : simple_pass.SimplePass = simple_pass.SimplePass(symbol)
+    conv2d_name_list = []
+    def _filter_op(sym: sx.Symbol) -> sx.Symbol:
+        if sym.op_name == opns.CONV2D:
+            conv2d_name_list.append(sym.name)
+        return sym
+
+    symbol_passed = tfs.visit(_filter_op)
+
+    print('\n=== After CustomFunc Pass ===')
+    assert len(conv2d_name_list) > 0
+    print(conv2d_name_list)
+    rlts = sx.sym2list(symbol_passed)
+
+    return True
+
+
+def test_SimplePass_FuseDropout_CustomFunc(mrt_graph):
+    symbol = mrt_graph['main']
+
+    print('\n=== Before FuseDropout CustomFunc Pass ===')
+    symlist = sx.sym2list(symbol)
+    dropout_op_cnt = 0
+    for sym in symlist:
+        dropout_op_cnt += 1 if sym.op_name == opns.DROP_OUT else 0
+    assert dropout_op_cnt > 0, f'ori model dropout op cnt {dropout_op_cnt} == zero!'
+
+    tfs : simple_pass.SimplePass = simple_pass.SimplePass(symbol)
+    def _nn_dropout(sym: sx.Symbol) -> sx.Symbol:
+        if sym.op_name == opns.DROP_OUT:
+            return sym.args[0]
+        return sym
+    symbol_passed = tfs.visit(_nn_dropout)
+
+    print('\n=== After FuseDropout CustomFunc Pass ===')
+    rlts = sx.sym2list(symbol_passed)
+    dropout_op_cnt_af = 0
+    for sym in rlts:
+        dropout_op_cnt_af += 1 if sym.op_name == opns.DROP_OUT else 0
+    assert dropout_op_cnt_af == 0, f'passed model dropout op cnt {dropout_op_cnt_af} != zero!'
+
+    return True
+
+
 if __name__ == "__main__":
 
     print("=== Testing SymbolPass ===")
     mrt_graph, mrt_params = _get_alexnet_model()
 
     print("Testing FuseDropoutPass for Model AlexNet")
-    rltflag = test_SymbolPass_FuseDropout(mrt_graph, mrt_params)
-
+    rltflag = test_SimplePass_FuseDropout(mrt_graph, mrt_params)
     print("\n" + "="*60 + "\n")
-    print('Passed Test!' if rltflag else 'Test Failed!')
+    print('Passed Test1!' if rltflag else 'Test1 Failed!')
+    print("\n" + "="*60 + "\n")
+
+    rltflag = test_SimplePass_CustomFunc(mrt_graph)
+    print("\n" + "="*60 + "\n")
+    print('Passed Test2!' if rltflag else 'Test2 Failed!')
+    print("\n" + "="*60 + "\n")
+
+    print("Testing FuseDropout CustomFunc for Model AlexNet")
+    rltflag = test_SimplePass_FuseDropout_CustomFunc(mrt_graph)
+    print("\n" + "="*60 + "\n")
+    print('Passed Test3!' if rltflag else 'Test3 Failed!')
     print("\n" + "="*60 + "\n")
 

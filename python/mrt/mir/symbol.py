@@ -19,6 +19,8 @@ __ALL__ = [
         "filter_operators",
         ]
 
+SelfSymbol = typing.TypeVar("SelfSymbol", bound="Symbol")
+
 def _format_printer(data):
     if isinstance(data, dict):
         data = ["{}={}".format(k, _format_printer(v)) \
