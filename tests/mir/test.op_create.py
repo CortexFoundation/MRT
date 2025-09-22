@@ -23,8 +23,8 @@ from mrt.mir import opclass
 
 def test_create_conv2d_op():
 
-    X = opclass.Variable(name="x", shape=(1, 3, 224, 224,), dtype="float")
-    W = opclass.Variable(name="w", shape=(32, 3, 10, 10,), dtype="float")
+    X = opclass.var(name="x", shape=(1, 3, 224, 224,), dtype="float")
+    W = opclass.var(name="w", shape=(32, 3, 10, 10,), dtype="float")
     assert [shp for shp in X.shape] == [shp for shp in (1, 3, 224, 224)], f'Wrong X shape {X.shape}'
     assert X.dtype == "float", f'Wrong X dtype {X.dtype}'
 
@@ -72,11 +72,11 @@ def test_create_conv2d_op():
 
 
 def test_create_symbol_graph():
-    X0 = opclass.Variable(name="x", shape=(1, 3, 224, 224,), dtype="float")
-    W0 = opclass.Variable(name="w", shape=(32, 3, 10, 10,), dtype="float")
+    X0 = opclass.var(name="x", shape=(1, 3, 224, 224,), dtype="float")
+    W0 = opclass.var(name="w", shape=(32, 3, 10, 10,), dtype="float")
     conv2d_a = opclass.Conv2D(X0, W0, name='conv2d_a', strides=(1,1))
 
-    W1 = opclass.Variable(shape=(16, 3, 12, 12,), dtype="float")
+    W1 = opclass.var(shape=(16, 3, 12, 12,), dtype="float")
     conv2d_b = opclass.Conv2D(conv2d_a, W1, name='conv2d_b', strides=(1,1))
     symlist = sx.sym2list(conv2d_b)
 
@@ -90,11 +90,11 @@ def test_create_symbol_graph():
 
 
 def test_create_batch_norm_op():
-    X = opclass.Variable(name="x", shape=(1, 32, 128, 128,), dtype="float")
-    Gamma = opclass.Variable(name="gamma", shape=(32,), dtype="float")
-    Beta = opclass.Variable(name="beta", shape=(32,), dtype="float")
-    Mean = opclass.Variable(name="mean", shape=(32,), dtype="float")
-    Var = opclass.Variable(name="var", shape=(32,), dtype="float")
+    X = opclass.var(name="x", shape=(1, 32, 128, 128,), dtype="float")
+    Gamma = opclass.var(name="gamma", shape=(32,), dtype="float")
+    Beta = opclass.var(name="beta", shape=(32,), dtype="float")
+    Mean = opclass.var(name="mean", shape=(32,), dtype="float")
+    Var = opclass.var(name="var", shape=(32,), dtype="float")
     batch_norm_a = opclass.BatchNorm(X, Gamma, Beta, Mean, Var, axis=1, epsilon=1e-4)
 
     # attrs hint
