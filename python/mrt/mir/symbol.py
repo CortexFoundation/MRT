@@ -322,6 +322,7 @@ def load_json(data: _SymbolJsonT, **extra_attrs) -> Symbol:
 
 _VisitorT = typing.Callable[[Symbol], None]
 _TransformerT = typing.Callable[[Symbol], typing.Optional[Symbol]]
+_TransformerParamT = typing.Callable[[Symbol, typing.Optional[ParametersT]], Symbol]
 """ Symbol Transformer
 
     Return new symbol to transform old symbol into updated one,
@@ -338,7 +339,7 @@ def visit(symbol: Symbol, callback: _VisitorT):
         if callback.__name__ in C.log_vot_cbs:
             config.log(callback.__name__, f">> {sym}")
 
-def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
+def transform(symbol: Symbol, callback: _TransformerParamT, params:typing.Optional[ParametersT] = None) -> Symbol:
     """ Transform symbol from old to new, with inputs updated.
 
         Only the return value indicates mutation, while changing
@@ -355,7 +356,7 @@ def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
         if callback.__name__ in C.log_vot_cbs:
             config.log(callback.__name__, f"<< {sym}")
 
-        out = callback(sym) or sym
+        out = (callback(sym, params) if params else callback(sym)) or sym
         assert isinstance(out, Symbol), out
         # default const_ prefix symbol means parameters
         assert sym.name not in sym_map, sym.name

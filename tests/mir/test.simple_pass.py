@@ -56,7 +56,7 @@ def test_SimplePass_FuseDropout(mrt_graph, mrt_params):
     # init FuseDropout Passer and execute visit
     tfs : simple_pass.FuseDropoutPass = simple_pass.FuseDropoutPass(symbol)
     #print(getattr(tfs, f"visit_{opns.Opname2Funcname(opns.DROP_OUT)}"))
-    symbol_passed = tfs.visit()
+    symbol_passed = tfs.graph_visits()
 
     print('\n=== After FuseDropout Pass ===')
     rlts = sx.sym2list(symbol_passed)
@@ -83,12 +83,12 @@ def test_SimplePass_CustomFunc(mrt_graph):
 
     tfs : simple_pass.SimplePass = simple_pass.SimplePass(symbol)
     conv2d_name_list = []
-    def _filter_op(sym: sx.Symbol) -> sx.Symbol:
+    def _filter_op(sym: sx.Symbol, params=None) -> sx.Symbol:
         if sym.op_name == opns.CONV2D:
             conv2d_name_list.append(sym.name)
         return sym
 
-    symbol_passed = tfs.visit(_filter_op)
+    symbol_passed = tfs.custom_visits(_filter_op)
 
     print('\n=== After CustomFunc Pass ===')
     assert len(conv2d_name_list) > 0
@@ -113,7 +113,7 @@ def test_SimplePass_FuseDropout_CustomFunc(mrt_graph):
         if sym.op_name == opns.DROP_OUT:
             return sym.args[0]
         return sym
-    symbol_passed = tfs.visit(_nn_dropout)
+    symbol_passed = tfs.custom_visits(_nn_dropout)
 
     print('\n=== After FuseDropout CustomFunc Pass ===')
     rlts = sx.sym2list(symbol_passed)
