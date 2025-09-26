@@ -132,7 +132,7 @@ from mrt.api import Trace, TraceConfig
 TraceConfig(
     calibrate_repeats=16,
     calibrate_sampling=None,
-    force_trace_or_cb="quantize",
+    force_run_from_trcb="quantize",
 ).register_global()
 tr = Trace.from_module(mod, bind_params, model_name=model_name,)
 tr.bind_dataset(ds, analysis.ClassificationOutput).log()

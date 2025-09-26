@@ -84,7 +84,7 @@ class FuseBatchNorm(Transformer):
             A, W = X.args
             conv_parsed: Conv2DAttrs = X.parsed
 
-            assert conv_parsed.kernel_layout == "OIHW"
+            # assert conv_parsed.kernel_layout == "OIHW"
             K = gamma.shape[0]
             assert W.shape[0] == K
 

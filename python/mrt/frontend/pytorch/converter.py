@@ -14,7 +14,7 @@ from mrt.mir import op
 from mrt.mir.opns import *
 from mrt.common.types import ParametersT
 from mrt.common.utils import N
-from .types import data_to_mrt
+from .types import data_to_mrt, data_to_torch
 
 __all__ = ["pytorch_to_mrt", "mrt_to_pytorch", "type_infer"]
 
@@ -65,7 +65,10 @@ TORCH_MRT_OP_MAP = {
         "chunk.default": _T(SPLIT, 1, [ Attr("chunks", 1), Attr("dim", 0) ]),
         "getitem": _T(TUPLE_GET_ITEM, 1, [ Attr("index", 0) ]),
         }
-MRT_TORCH_OP_MAP = {
+
+from ..func_mapper import map_function, FunctionMapper
+
+MRT_TORCH_OP_MAP = FunctionMapper({
         TUPLE: lambda *args: [ *args ],
         TUPLE_GET_ITEM: lambda x, index: x[index],
 
@@ -74,14 +77,27 @@ MRT_TORCH_OP_MAP = {
         SILU: F.silu,
         SIGMOID: F.sigmoid,
         DENSE: F.linear,
-        CONV2D: F.conv2d,
-        BATCH_NORM: F.batch_norm,
+        **map_function(
+            func_map={
+                CONV2D: F.conv2d,
+                MAX_POOL2D: F.max_pool2d, },
+            attr_map={ "strides": "stride" },
+            ),
 
-        MAX_POOL2D: F.max_pool2d,
+        **map_function(
+            func_map={ SUM: torch.sum, },
+            attr_map={ "axis": "dim" },
+            ),
         ADAPTIVE_AVG_POOL2D: F.adaptive_avg_pool2d,
 
         FLATTEN: torch.flatten,
-        CONCAT: torch.cat,
+        CLIP: torch.clip,
+        AS_TYPE: lambda x, dtype: x.to(
+            dtype=getattr(torch, dtype)),
+        **map_function(
+            func_map={ CONCAT: torch.cat, },
+            arg_map=lambda args: [ args, ],
+            ),
         RESHAPE: torch.reshape,
         TRANSPOSE: torch.transpose,
         PASS: lambda x: x,
@@ -91,7 +107,13 @@ MRT_TORCH_OP_MAP = {
         MUL: torch.mul,
         DROP_OUT: F.dropout,
         MEAN: torch.mean,
-        }
+        })
+
+@MRT_TORCH_OP_MAP.add_arg_mapper({ BATCH_NORM: F.batch_norm })
+def _torch_batch_norm_args_reorder(args):
+    args = [ *args, None, None, None, None ][:5]
+    # reorder in [input, running_mean, running_var, weight, bias]
+    return [ args[0], args[3], args[4], args[1], args[2] ]
 
 def create_parameters(ep: torch.export.ExportedProgram):
     """Create relax input vars."""
@@ -270,14 +292,6 @@ def _infer_single_op(sym: Symbol, env: typing.Dict[str, F.Tensor]) -> F.Tensor:
 
     args = [env[a.name] for a in sym.args]
     attrs = {k: v for k, v in sym.attrs.items()}
-    if sym.op_name in [BATCH_NORM]:
-        args = [*args, None, None, None, None][:5]
-        # reorder in [input, running_mean, running_var, weight, bias]
-        args = [ args[0], args[3], args[4], args[1], args[2] ]
-    if sym.op_name in [CONV2D, MAX_POOL2D]:
-        attrs["stride"] = attrs.pop("strides")
-    if sym.op_name == CONCAT:
-        args = [ args, ]
     out = MRT_TORCH_OP_MAP[sym.op_name](*args, **attrs)
     return out
 

@@ -16,8 +16,9 @@ from .mir import op, helper
 from .mir.symbol import *
 
 from .dataset.base import Dataset
-from .frontend.tvm import relax as relax_api, vm
-from .frontend.tvm.types import *
+from . import frontend as ft
+# from .frontend.tvm import relax as relax_api, vm
+# from .frontend.tvm.types import *
 
 from .quantization import segement as seg
 from .quantization import fixed_point as fp
@@ -31,8 +32,12 @@ from .quantization.transform import TransformerT
 class TraceConfig(config._BaseConfig):
     calibrate_repeats: int = 16
     calibrate_sampling: typing.Optional[typing.Callable] = None
-    force_trace_or_cb: typing.Optional[str]  = None
+    force_run_from_trcb: typing.Optional[str]  = None
     """ force trace or callback func to run. """
+
+    log_before_tr_or_cbs: typing.List[str] = field(default_factory=list)
+    log_after_tr_or_cbs: typing.List[str] = field(default_factory=list)
+    log_after_all: bool = False
 
 
 @dataclass
@@ -56,7 +61,7 @@ class Trace:
     # post init and no inherit
     _sym_inputs: typing.List[Symbol] = field(init=False)
     _sym_params: typing.List[Symbol] = field(init=False)
-    _executor: typing.Optional[vm.Executor] = None
+    _executor: typing.Optional[typing.Any] = None
 
     BASE_DIR: typing.ClassVar[str] = "./zkml_data"
 
@@ -132,12 +137,14 @@ class Trace:
         for i in range(max_iter_num or 99999999999999):
             # all trace use same input data to compare accuracy.
             data = t._dataset.next()
+            print("iter data:", data[0].shape, data[0].flatten()[:10], data[1])
             dls = [data for t in all_traces]
             if any([dl is None for dl in dls]):
                 break
             for t, (data, label), stat in zip(
                     all_traces, dls, all_stats):
                 out = t.eval(data, **kwargs)
+                #  print(t.name, out.shape, label)
                 stat.merge((out, label))
             msg = log_str.format(i, *[s.info() for s in all_stats])
             print(msg)
@@ -147,12 +154,14 @@ class Trace:
             data: typing.Optional[np.ndarray] = None,
             **kwargs,) -> np.ndarray:
         if self._executor is None:
-            self._executor = vm.create_executor(
-                    self.to_module(), self.params, **kwargs)
+            self._executor = ft.create_executor(
+                    self.graph, self.params, **kwargs)
 
-        res = vm.run_executor(self._executor, data)
-        assert len(res) == 1
-        return res[0]
+        res = ft.run_executor(self._executor, data)
+        assert isinstance(res, np.ndarray)
+        return res
+        #  assert len(res) == 1
+        #  return res[0]
 
     def _new(self, tr_name: str,
              graph: MultiHeadSymbol,
@@ -173,9 +182,14 @@ class Trace:
         assert len(callbacks) > 0
         tr_name = tr_name or callbacks[-1].__name__
 
-        force = (C.force_trace_or_cb in \
+        force = (C.force_run_from_trcb in \
                 [tr_name, *[cb.__name__ for cb in callbacks]])
         self._force = self._force or force
+
+        lookup = [tr_name, *[cb.__name__ for cb in callbacks]]
+
+        if tr_name in C.log_before_tr_or_cbs:
+            self.log()
 
         tr_path = self._get_checkpoint_path(tr_name)
         if path.exists(tr_path) and not self._force:
@@ -188,11 +202,22 @@ class Trace:
             params = {k: v for k, v in out.params.items()}
             print("Apply Trace: {:25} Transformer: {}".format(
                 tr_name, cb.__name__))
+
+            if cb.__name__ in C.log_before_tr_or_cbs:
+                out.log()
+
             symbol = cb(out.symbol, params, **kwargs)
             graph = MultiHeadSymbol.from_tuple(
                     self.tuple_names, symbol)
             out = out._new(tr_name, graph, params)
+
+            if C.log_after_all or \
+                    cb.__name__ in C.log_after_tr_or_cbs:
+                out.log()
+
         out.dump(tr_path)
+        if C.log_after_all or tr_name in C.log_after_tr_or_cbs:
+            out.log()
         #  out = Trace.load(tr_path)
         return out
 
@@ -329,27 +354,27 @@ class Trace:
         print("Load  Trace: {:20} from {}".format(name, tr_path))
         return Trace(model, name, graph, params)
 
-    def to_module(self) -> TVMModule:
-        return relax_api.graph2mod(self.graph, self.params)
+    #  def to_module(self) -> TVMModule:
+    #      return relax_api.graph2mod(self.graph, self.params)
 
-    @staticmethod
-    def from_module(
-            mod: TVMModule,
-            bind_params: typing.Optional[list] = None,
-            tr_name: str = "from_mod",
-            model_name: str = "unknown-model"):
-        graph, params = relax_api.mod2graph(mod, bind_params)
-        return Trace(model_name, tr_name, graph, params)
+    #  @staticmethod
+    #  def from_module(
+    #          mod: TVMModule,
+    #          bind_params: typing.Optional[list] = None,
+    #          tr_name: str = "from_mod",
+    #          model_name: str = "unknown-model"):
+    #      graph, params = relax_api.mod2graph(mod, bind_params)
+    #      return Trace(model_name, tr_name, graph, params)
 
-    @staticmethod
-    def from_expr(
-            expr: TVMExpr, params: ParametersT,
-            tr_name = "from_expr",
-            model_name="unknown-model") -> Trace:
-        print("Init  Trace: {:20} from model {}'s expr".format(
-            tr_name, model_name))
-        symbol, params = relax_api.expr2symbol(expr, params)
-        graph = MultiHeadSymbol.from_symbol(symbol)
-        return Trace(model_name, tr_name, graph, params)
+    #  @staticmethod
+    #  def from_expr(
+    #          expr: TVMExpr, params: ParametersT,
+    #          tr_name = "from_expr",
+    #          model_name="unknown-model") -> Trace:
+    #      print("Init  Trace: {:20} from model {}'s expr".format(
+    #          tr_name, model_name))
+    #      symbol, params = relax_api.expr2symbol(expr, params)
+    #      graph = MultiHeadSymbol.from_symbol(symbol)
+    #      return Trace(model_name, tr_name, graph, params)
 
 

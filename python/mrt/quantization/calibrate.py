@@ -3,14 +3,12 @@ from __future__ import annotations
 import typing
 import numpy as np
 
-import tvm
 
 from dataclasses import dataclass, field, InitVar
 
 from mrt.mir import op, opns
 from mrt.mir.symbol import *
 from mrt.runtime import inference
-from mrt.frontend.tvm.types import *
 
 from .transform import Transformer
 

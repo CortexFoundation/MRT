@@ -32,7 +32,8 @@ def run_executor(
         data = torch.from_numpy(data).to(device)
     with torch.no_grad():
         out = vm(data, **data_dict)
-    return data_to_mrt(out.detach().cpu())
+    # print("run executor:", out.shape)
+    return data_to_mrt(out)
 
 def infer(graph: MultiHeadSymbol, params: ParametersT,
           data: typing.Optional[np.ndarray] = None,

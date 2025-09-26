@@ -2,9 +2,6 @@ import typing
 
 from mrt.common.types import *
 from mrt.common import config
-from mrt.frontend import api
-#  from mrt.mir import op, opns
-#  from mrt.symbol import Symbol, transform
 
 #  from . import config
 from . import op, opns
@@ -27,9 +24,12 @@ def register_type_infer(
     return _set_rule
 
 def infer_single(symbol: Symbol) -> Symbol:
-    C = config.LogConfig.G()
+    C: config.LogConfig = config.LogConfig.G()
 
     out = op.retrieve_operator(symbol)
+
+    from mrt.frontend import api
+    # use frontend type_infer api as fallback.
     _infer = _INFER_TYPE_REG.get(out.op_name, api.type_infer)
     assert _infer is not None
 

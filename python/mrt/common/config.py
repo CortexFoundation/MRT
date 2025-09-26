@@ -9,6 +9,13 @@ SelfConfig = typing.TypeVar("T", bound="_BaseConfig")
 
 @dataclass
 class _BaseConfig(utils.Scope):
+    def __post_init__(self):
+        """ Non-dataclass parent's init function will not be
+                called in auto-generated init function.
+        """
+        # Ensure Scope initialization to manage enter/exit state
+        super().__init__()
+
     def copy(self, **new_attrs) -> SelfConfig:
         attrs = utils.dataclass_to_dict(self)
         attrs.update(new_attrs)
@@ -82,4 +89,3 @@ def log_str(name: str, *segs) -> str:
 
 def log(*args, **kwargs):
     print(log_str(*args, **kwargs))
-

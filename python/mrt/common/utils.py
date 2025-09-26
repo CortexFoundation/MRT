@@ -25,7 +25,7 @@ class Scope:
         2. Scope can enter/exit recursively
         3. Scope has Global instance by default.
     """
-    __CURR_GLOBAL_INSTANCE__: SelfScope | None = None
+    __CURR_GLOBAL_INSTANCE__: typing.Optional[SelfScope] = None
 
     def __init__(self):
         """ Scope will auto record current global scope. """
@@ -65,7 +65,7 @@ class N(Scope):
             self.counter += 1
         name = "{}{}{}".format(prefix, index, suffix)
         if self.scope_name:
-            name = "{}.{}".format(self.scope_name, name)
+            name = "{}_{}".format(self.scope_name, name)
         return name
 
     @staticmethod
@@ -183,4 +183,3 @@ def get_class_name(o):
     if module == 'builtins':
         return klass.__qualname__ # avoid outputs like 'builtins.str'
     return module + '.' + klass.__qualname__
-

@@ -2,11 +2,7 @@ import typing
 
 import numpy as np
 
-try:
-    import tvm
-    OpOutputT = typing.Union[tvm.nd.NDArray, list]
-except Exception:
-    pass
+OpOutputT = typing.Union[list, typing.Any]
 
 OpNumpyT = typing.Union[np.ndarray, list]
 ParametersT = typing.Dict[str, OpNumpyT]

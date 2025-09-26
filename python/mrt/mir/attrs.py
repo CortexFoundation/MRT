@@ -1,9 +1,8 @@
 from functools import wraps
 from dataclasses import dataclass, fields, Field
 
-import tvm
-
 from mrt.common.types import *
+from mrt import frontend as ft
 # from .types import *
 from .op import *
 
@@ -11,9 +10,10 @@ from .op import *
 class _BaseAttrs:
     @classmethod
     def parse(cls, attrs: AttrsT):
-        ftypes = {f.name: f.type for f in fields(cls)}
+        ftypes = {f.name: f for f in fields(cls)}
         try:
-            data = {k: attrs[k] for k in ftypes}
+            data = {k: attrs.get(k, v.default) \
+                    for k, v in ftypes.items()}
             #  for k, v in data.items():
             #      assert isinstance(v, ftypes[k]), (
             #              "{}({}) vs. {} in {}"
@@ -42,9 +42,8 @@ def _format_as_tuple(attrs: AttrsT, *keys):
     for k in keys:
         if k not in attrs:
             continue
-        val = attrs[k]
-        if not isinstance(val,
-                (list, tuple, tvm.ir.container.Array)):
+        val = ft.data_from_frontend(attrs[k])
+        if not isinstance(val, (list, tuple)):
             attrs[k] = [ val, val ]
     return attrs
 
@@ -133,21 +132,21 @@ class Conv2DAttrs(_BaseAttrs):
     groups: int
     #  channels: int
     #  kernel_size: typing.Tuple[int, int]
-    data_layout: str
-    kernel_layout: str
-    out_layout: str
-    out_dtype: str
+    #  data_layout: str
+    #  kernel_layout: str
+    #  out_layout: str
+    #  out_dtype: str
 
     @classmethod
     def parse(cls, attrs: AttrsT):
         attrs = _format_as_tuple(attrs,
                 "strides", "dilation",
                 "kernel_size", "padding")
-        attrs.setdefault("kernel_layout", "OIHW")
-        attrs.setdefault("data_layout", "NCHW")
-        #  attrs.setdefault("channels", None)
-        attrs.setdefault("out_layout", "")
-        attrs.setdefault("out_dtype", "")
+        #  attrs.setdefault("kernel_layout", "OIHW")
+        #  attrs.setdefault("data_layout", "NCHW")
+        #  #  attrs.setdefault("channels", None)
+        #  attrs.setdefault("out_layout", "")
+        #  attrs.setdefault("out_dtype", "")
         return super().parse(attrs)
 
 @dataclass

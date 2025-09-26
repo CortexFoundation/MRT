@@ -3,8 +3,7 @@ import numpy as np
 
 from mrt.mir.symbol import *
 from mrt.mir.opns import *
-from mrt.frontend.tvm import types, relax
-from mrt.frontend.tvm import vm
+from mrt import frontend as ft
 
 from mrt.quantization.transform import WithParameters
 from mrt.mir import op
@@ -36,8 +35,11 @@ def run_single(
         return np.ones(sym.shape, sym.dtype)
 
     params = { c.name: args_data[i] for i, c in enumerate(sym.args) }
-    mod = relax.graph2mod(sym, params)
-    return vm.infer(mod, params, **kwargs)
+    return ft.infer(
+            MultiHeadSymbol.from_symbol(sym), params,
+            **kwargs)
+    # mod = relax.graph2mod(sym, params)
+    # return vm.infer(mod, params, **kwargs)
 
 def _mx_executor(sym: Symbol, inputs):
     from mxnet import nd

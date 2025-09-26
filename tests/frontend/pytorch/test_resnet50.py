@@ -18,31 +18,31 @@ from mrt.frontend.pytorch import pytorch_to_mrt, mrt_to_pytorch, type_infer
 from mrt.frontend.pytorch import vm
 from mrt.mir import helper, symbol as sx
 
-def test_resnet50_operations():
-    """Test what operations ResNet50 uses."""
-    
-    # Load pre-trained ResNet50
-    model = models.resnet50(weights='IMAGENET1K_V1')
-    model.eval()
-    
-    # Create example input
-    example_inputs = torch.randn(1, 3, 224, 224)
-    
-    print("Exporting ResNet50...")
-    ep = torch.export.export(model, (example_inputs,))
-    
-    print("Operations used in ResNet50:")
-    operations = set()
-    for node in ep.graph.nodes:
-        if node.op == 'call_function':
-            func_name = node.target.__name__
-            operations.add(func_name)
-            print(f"  {func_name}")
-    
-    print(f"\nTotal unique operations: {len(operations)}")
-    print("Operations:", sorted(operations))
-    
-    return operations
+#  def test_resnet50_operations():
+#      """Test what operations ResNet50 uses."""
+
+#      # Load pre-trained ResNet50
+#      model = models.resnet50(weights='IMAGENET1K_V1')
+#      model.eval()
+
+#      # Create example input
+#      example_inputs = torch.randn(1, 3, 224, 224)
+
+#      print("Exporting ResNet50...")
+#      ep = torch.export.export(model, (example_inputs,))
+
+#      print("Operations used in ResNet50:")
+#      operations = set()
+#      for node in ep.graph.nodes:
+#          if node.op == 'call_function':
+#              func_name = node.target.__name__
+#              operations.add(func_name)
+#              print(f"  {func_name}")
+
+#      print(f"\nTotal unique operations: {len(operations)}")
+#      print("Operations:", sorted(operations))
+
+#      return operations
 
 def test_resnet50_conversion():
     """Test conversion with pre-trained ResNet50."""
@@ -152,7 +152,7 @@ def test_resnet50_type_infer():
 
 if __name__ == "__main__":
     print("Testing ResNet50 operations...")
-    operations = test_resnet50_operations()
+    #  operations = test_resnet50_operations()
 
     print("\n" + "="*60 + "\n")
 

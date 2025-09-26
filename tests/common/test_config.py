@@ -65,5 +65,37 @@ def test_empty_env_does_not_mutate():
     new_cfg = cfg.copy().load_from_env()
     assert cfg == new_cfg
 
+def test_config_scope_enter_exit():
+    orig = MRTConfig.G()
+    orig_frontend = orig.frontend
+    with MRTConfig(frontend="tvm") as cfg:
+        assert MRTConfig.G() is cfg
+        assert MRTConfig.G().frontend == "tvm"
+    after = MRTConfig.G()
+    assert after is orig
+    assert after.frontend == orig_frontend
+
+def test_nested_same_class_scope():
+    base = MRTConfig.G()
+    with MRTConfig(frontend="tvm") as c1:
+        assert MRTConfig.G() is c1
+        with MRTConfig(frontend="pytorch") as c2:
+            assert MRTConfig.G() is c2
+            assert MRTConfig.G().frontend == "pytorch"
+        assert MRTConfig.G() is c1
+        assert MRTConfig.G().frontend == "tvm"
+    assert MRTConfig.G() is base
+
+def test_scope_independent_between_classes():
+    orig_mrt = MRTConfig.G()
+    orig_log = LogConfig.G()
+    with MRTConfig(frontend="tvm"):
+        assert LogConfig.G() is orig_log
+    with LogConfig(name_width=20) as L:
+        assert MRTConfig.G() is orig_mrt
+        assert LogConfig.G() is L
+    assert MRTConfig.G() is orig_mrt
+    assert LogConfig.G() is orig_log
+
 if __name__ == "__main__":
     pytest.main(["-s", __file__, "-vvv"])

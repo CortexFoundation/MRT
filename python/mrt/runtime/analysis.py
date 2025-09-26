@@ -1,7 +1,6 @@
 from os import path
 import enum
 
-import tvm
 import numpy as np
 
 from mrt.common.types import *

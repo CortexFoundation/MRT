@@ -17,8 +17,8 @@ to_frontend = mrt_to_pytorch
 model_from_frontend = pytorch_to_mrt
 model_to_frontend = mrt_to_pytorch
 
-data_from_frontend = data_to_torch
-data_to_frontend = data_to_mrt
+data_to_frontend = data_to_torch
+data_from_frontend = data_to_mrt
 
 __all__ = [
     "model_from_frontend",

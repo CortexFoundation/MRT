@@ -6,14 +6,11 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-import tvm
-
 from mrt.mir.symbol import *
 
 from mrt.mir import op, opns
 from mrt.mir.attrs import _BaseAttrs, parse_attrs
 
-from mrt.frontend.tvm.types import *
 from mrt.common.utils import N
 
 @dataclass(repr=False)

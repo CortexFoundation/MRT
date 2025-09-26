@@ -44,7 +44,7 @@ class DynamicModule(Singleton):
         @wraps(func)
         def _func_impl(*args, **kwargs):
             assert self._funcs[fname] is not None, f"func:{fname} not registered in mod: {self._funcs.keys()}"
-            print(f"run {fname}")
+            # print(f"run {fname}")
             func(*args, **kwargs)
             return self._funcs[fname](*args, **kwargs)
         return _func_impl

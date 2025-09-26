@@ -8,7 +8,7 @@ from mrt.common.types import *
 def data_to_mrt(data: typing.Union[torch.Tensor, list]) -> OpNumpyT:
     def _as_numpy(data):
         if isinstance(data, torch.Tensor):
-            return data.detach().numpy()
+            return data.detach().cpu().numpy()
         elif isinstance(data, torch.nn.Parameter):
             return _as_numpy(data.data)
         elif isinstance(data, torch.dtype):

@@ -106,7 +106,9 @@ def prec_rules(*op_names):
         return f
     return _add_rules
 
-_infer_mul: RulesFuncT = lambda s: sum([c.precision for c in s.args])
+_infer_mul: RulesFuncT = lambda s: sum([c.precision for c in s.args[:2]])
+""" conv2d may has 3-args, use prefix-2. """
+
 _infer_max: RulesFuncT = lambda s: max([c.precision for c in s.args])
 
 def _infer_index(s: WithPrecision, index: int):
@@ -194,6 +196,10 @@ class PrecisionRevisor(WithPrecision, Transformer):
                     ) % out.op_name
             oprec = _INFER_RULES[out.op_name](out)
             # TODO: more precision decision?
+            # if out.op_name == DENSE:
+            #     print(self)
+            #     print(">> ", out)
+            #     print("infered prec:", oprec)
             if out.precision_defined and oprec > out.precision:
                 out.precision, oprec = oprec, out.precision
                 out = op.pclip(out, precision=oprec).like(
