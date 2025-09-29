@@ -21,6 +21,20 @@ from mrt.mir import opns
 from mrt.mir import opclass
 
 
+def test_op_func():
+    X = opclass.var(name="var2", shape=(16, 128, 128), dtype="float")
+    ceil0 = opclass.ceil(X)
+    assert isinstance(ceil0, sx.Symbol), 'ceil0 isnot a symbol'
+    assert ceil0.op_name == opns.CEIL
+    assert len(ceil0.name) > 0
+
+    ceil1 = opclass.ceil(X, 'ceil_1')
+    assert ceil1.op_name == opns.CEIL
+    assert ceil1.name == 'ceil_1'
+
+    return True
+
+
 def test_create_conv2d_op():
 
     X = opclass.var(name="x", shape=(1, 3, 224, 224,), dtype="float")
@@ -68,6 +82,10 @@ def test_create_conv2d_op():
     assert isinstance(conv2d_d, opclass.Conv2D), 'conv2d_d isnot a Conv2D'
     assert isinstance(conv2d_e, opclass.Conv2D), 'conv2d_e isnot a Conv2D'
 
+    # alias function Init
+    conv2d_f = opclass.conv2d(*args, **attrs)
+    assert isinstance(conv2d_f, opclass.Conv2D), 'conv2d_f isnot a Conv2D'
+
     return True
 
 
@@ -104,11 +122,37 @@ def test_create_batch_norm_op():
 
     # test clone mode
     batch_norm_b = batch_norm_a.copy()
-    assert isinstance(batch_norm_b , opclass.BatchNorm)
+    assert isinstance(batch_norm_b, opclass.BatchNorm)
 
     assert batch_norm_a.attrs == batch_norm_b.attrs, f'a: {batch_norm_a.attrs} != b: {batch_norm_b.attrs}'
     assert len(batch_norm_a.args) == len(batch_norm_b.args), f'a: {len(batch_norm_a.args)} != b: {len(batch_norm_b.args)}'
 
+    return True
+
+
+def test_create_reshape_op():
+    X = opclass.var(name="x", shape=(16, 32, 64, 64,), dtype="float")
+    try:
+        reshape0 = opclass.Reshape(X, name="reshape_0")
+        assert False, "Reshape Must have attr 'newshape', Should already Fail!"
+    except:
+        pass
+
+    reshape1 = opclass.Reshape(X, name="reshape_1", newshape=(16, 8, 128, 128))
+    assert isinstance(reshape1, opclass.Reshape)
+
+    return True
+
+
+def test_op_extern_func():
+
+    # extern_func Do not need to fill 'op_name'
+    args = [opclass.var(name="var2", shape=(16, 128, 128), dtype="float")]
+    attrs = {}
+    extra_attrs = {}
+    call_dps_packed = opclass.MRT_OP_MAP[opns.CALL_DPS_PACKED]('packed_0', args, attrs, extra_attrs)
+    assert isinstance(call_dps_packed, sx.Symbol), 'call_dps_packed isnot a symbol'
+    assert call_dps_packed.op_name == opns.CALL_DPS_PACKED
     return True
 
 
@@ -120,10 +164,14 @@ if __name__ == "__main__":
     print('MRT_OP_MAP Conv2D Class as:', opclass.MRT_OP_MAP[opns.CONV2D])
 
     test_id = 0
-    for func_ in [test_create_conv2d_op, test_create_symbol_graph, test_create_batch_norm_op]:
+    passed_cnt = 0
+    test_funcs = [test_op_func, test_create_conv2d_op, test_create_symbol_graph, test_create_batch_norm_op, test_create_reshape_op, test_op_extern_func]
+    for func_ in test_funcs:
         rltflag = func_()
         test_id += 1
+        passed_cnt += rltflag
         print("\n" + "="*60 + "\n")
-        print(f'Passed Test{test_id}!' if rltflag else f'Test{test_id} Failed!')
+        print(f'Passed Test{test_id} Processed({passed_cnt}/{len(test_funcs)}), Passed({passed_cnt}/{test_id})!' if rltflag else f'Test{test_id} Failed! Processed({passed_cnt}/{len(test_funcs)}), Passed({passed_cnt}/{test_id})!')
         print("\n" + "="*60 + "\n")
+    print(f'Summary_Passed {passed_cnt}/{len(test_funcs)}')
 

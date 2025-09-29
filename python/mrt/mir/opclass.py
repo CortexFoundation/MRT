@@ -9,7 +9,7 @@ from .symbol import SelfSymbol
 
 #SelfSymbol = typing.TypeVar("SelfSymbol", bound="Symbol")
 
-SymbolCreator = typing.Union[typing.Callable[[typing.Any, typing.Any], typing.Type[symbol.Symbol]], SelfSymbol]
+SymbolCreator = typing.Union[typing.Callable[[typing.Any, ...], typing.Type[symbol.Symbol]], SelfSymbol]
 #SymbolCreator = typing.Union[typing.Callable[[...], symbol.Symbol], SelfSymbol]
 
 MRT_OP_MAP: typing.Dict[str, SymbolCreator] = {}
@@ -29,8 +29,9 @@ def _register_op_map(op_name: str):
 # OPs from external (not in MRT op), using custom op_name with default op_func
 #y = extern_opfunc("tanh")(X)
 def extern_opfunc(op_name: str):
-    def op_func(*args, **attrs):
-        return symbol.Symbol(*args, op_name=op_name, **attrs)
+    def op_func(name, args, attrs, extra_attrs):
+        #return symbol.Symbol(op_name=op_name, *args, **attrs)
+        return symbol.Symbol(name, op_name, args, attrs, extra_attrs)
     return op_func
 
 
@@ -91,19 +92,26 @@ class Conv2D(symbol.Symbol):
 
     @property
     def kernel_size(self) -> typing.Tuple[int, int]:
-        default_val = (3,3)
-        return self.attrs['kernel_size'] if 'kernel_size' in self.attrs else default_val
+        assert 'kernel_size' in self.attrs
+        return self.attrs['kernel_size']
 
 
     # Follows (*args, name, **attrs)
-    def __init__(self, X, W, name=None, op_name=None, strides=(1,1), padding=(0,0,0,0), groups=1, dilation=(1,1), kernel_size=(3,3), extra_attrs=None):
+    def __init__(self, X, W, name=None, op_name=None, strides=(1,1), padding=(0,0,0,0), groups=1, dilation=(1,1), extra_attrs=None):
         op_name = op_name or opns.CONV2D
         assert op_name == opns.CONV2D
+        assert len(W.shape) == 4, f'Wrong Weight Shape for Conv2D: {W.shape}'
+        kernel_size = (W.shape[2], W.shape[3])
         super().__init__(name=name or N.n(), op_name=op_name, args=[X,W], attrs={'strides':strides, 'padding':padding, 'groups':groups, 'dilation':dilation, 'kernel_size':kernel_size}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
-        return _from_dict_attrs(cls, d, ['strides', 'padding', 'groups', 'dilation', 'kernel_size'], **kwargs)
+        # Auto inferred 'kernel_size'
+        return _from_dict_attrs(cls, d, ['strides', 'padding', 'groups', 'dilation'], **kwargs)
+
+def conv2d(X, W, name=None, op_name=None, strides=(1,1), padding=(0,0,0,0), groups=1, dilation=(1,1), extra_attrs=None):
+    return Conv2D(X, W, name, op_name, strides, padding, groups, dilation, extra_attrs)
+
 
 @dataclass(init=False)
 class Dropout(symbol.Symbol):
@@ -123,28 +131,37 @@ class Dropout(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['p'], **kwargs)
 
+def dropout(X, name=None, op_name=None, p:float = 0.5, extra_attrs=None):
+    return Dropout(X, name, op_name, p, extra_attrs)
+
+
 @dataclass(init=False)
 class Clip(symbol.Symbol):
     op_name = opns.CLIP
     
     @property
     def min(self) -> float:
-        default_val = np.nan
-        return self.attrs['min'] if 'min' in self.attrs else default_val
+        assert 'min' in self.attrs
+        return self.attrs['min']
 
     @property
     def max(self) -> float:
-        default_val = np.nan
-        return self.attrs['max'] if 'max' in self.attrs else default_val
+        assert 'max' in self.attrs
+        return self.attrs['max']
 
     def __init__(self, X, name=None, op_name=None, min_:float = np.nan, max_:float = np.nan, extra_attrs=None):
         op_name = op_name or opns.CLIP
         assert op_name == opns.CLIP
+        assert min_ != np.nan
+        assert max_ != np.nan
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'min': min_, 'max': max_}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['min', 'max'], **kwargs)
+
+def clip(X, name=None, op_name=None, min_:float = np.nan, max_:float = np.nan, extra_attrs=None):
+    return Clip(X, name, op_name, min_, max_, extra_attrs)
 
 
 @dataclass(init=False)
@@ -175,6 +192,9 @@ class BatchNorm(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['axis', 'epsilon', 'momentum'], **kwargs)
 
+def batch_norm(X, Gamma, Beta, Mean, Var, name=None, op_name=None, axis:int = 1, epsilon:float = 1e-5, momentum:float = 0.1, extra_attrs=None):
+    return BatchNorm(X, Gamma, Beta, Mean, Var, name, op_name, axis, epsilon, momentum, extra_attrs)
+
  
 @dataclass(init=False)
 class TupleGetItem(symbol.Symbol):
@@ -194,6 +214,9 @@ class TupleGetItem(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['index'], **kwargs)
 
+def tuple_get_item(X, name=None, op_name=None, index:int = 0, extra_attrs=None):
+    return TupleGetItem(X, name, op_name, index, extra_attrs)
+
 
 @dataclass(init=False)
 class LeakyRelu(symbol.Symbol):
@@ -212,6 +235,9 @@ class LeakyRelu(symbol.Symbol):
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['negative_slope'], **kwargs)
+
+def leaky_relu(X, name=None, op_name=None, negative_slope:float = 1e-2, extra_attrs=None):
+    return LeakyRelu(X, name, op_name, negative_slope, extra_attrs)
 
 
 def dense(X, W, B, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
@@ -242,6 +268,8 @@ class Hardtanh(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['min_val', 'max_val'], **kwargs)
 
+def hard_tanh(X, name=None, op_name=None, min_val:float = -1.0, max_val:float = 1.0, extra_attrs=None):
+    return Hardtanh(X, name, op_name, min_val, max_val, extra_attrs)
 
 @dataclass(init=False)
 class AdaptiveAvgPool2D(symbol.Symbol):
@@ -249,17 +277,21 @@ class AdaptiveAvgPool2D(symbol.Symbol):
 
     @property
     def output_size(self) -> typing.Union[int, typing.Tuple[int, int]]:
-        default_val = 0
-        return self.attrs['output_size'] if 'output_size' in self.attrs else default_val
+        assert 'output_size' in self.attrs
+        return self.attrs['output_size']
 
-    def __init__(self, X, name=None, op_name=None, output_size:typing.Union[int, typing.Tuple[int, int]]=0, extra_attrs=None):
+    def __init__(self, X, name=None, op_name=None, output_size:typing.Union[int, typing.Tuple[int, int]]=None, extra_attrs=None):
         op_name = op_name or opns.ADAPTIVE_AVG_POOL2D
         assert op_name == opns.ADAPTIVE_AVG_POOL2D
+        assert output_size != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'output_size': output_size}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['output_size'], **kwargs)
+
+def adaptive_avg_pool2d(X, name=None, op_name=None, output_size:typing.Union[int, typing.Tuple[int, int]]=0, extra_attrs=None):
+    return AdaptiveAvgPool2D(X, name, op_name, output_size, extra_attrs)
 
 @dataclass(init=False)
 class AvgPool2D(symbol.Symbol):
@@ -267,15 +299,19 @@ class AvgPool2D(symbol.Symbol):
 
     @property
     def pool_size(self) -> typing.Tuple[int, int]:
-        default_val = (2, 2)
-        return self.attrs['pool_size'] if 'pool_size' in self.attrs else default_val
+        assert 'pool_size' in self.attrs
+        return self.attrs['pool_size']
     @property
-    def strides(self):
-        default_val = None
+    def strides(self) -> typing.Tuple[int, int]:
+        default_val = (0, 0)
         return self.attrs['strides'] if 'strides' in self.attrs else default_val
     @property
-    def padding(self) -> int:
-        default_val = 0
+    def dilation(self) -> typing.Tuple[int, int]:
+        default_val = (1, 1)
+        return self.attrs['dilation'] if 'dilation' in self.attrs else default_val
+    @property
+    def padding(self) -> typing.Tuple[int, int, int, int]:
+        default_val = (0, 0, 0, 0)
         return self.attrs['padding'] if 'padding' in self.attrs else default_val
     @property
     def ceil_mode(self) -> bool:
@@ -290,14 +326,19 @@ class AvgPool2D(symbol.Symbol):
         default_val = True
         return self.attrs['count_include_pad'] if 'count_include_pad' in self.attrs else default_val
 
-    def __init__(self, X, name=None, op_name=None, pool_size=(2,2), strides=None, padding=0, ceil_mode=False, layout='NCHW', count_include_pad=True, extra_attrs=None):
+    def __init__(self, X, name=None, op_name=None, pool_size=None, dilation=(1,1), strides=(0,0), padding=(0,0,0,0), ceil_mode=False, layout='NCHW', count_include_pad=True, extra_attrs=None):
         op_name = op_name or opns.AVG_POOL2D
         assert op_name == opns.AVG_POOL2D
-        super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'pool_size':pool_size, 'strides':strides, 'padding':padding, 'ceil_mode':ceil_mode, 'layout':layout, 'count_include_pad':count_include_pad}, extra_attrs=extra_attrs or {})
+        assert pool_size != None
+        super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'pool_size':pool_size, 'dilation':dilation, 'strides':strides, 'padding':padding, 'ceil_mode':ceil_mode, 'layout':layout, 'count_include_pad':count_include_pad}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
-        return _from_dict_attrs(cls, d, ['pool_size', 'strides', 'padding', 'ceil_mode', 'layout', 'count_include_pad'], **kwargs)
+        return _from_dict_attrs(cls, d, ['pool_size', 'dilation', 'strides', 'padding', 'ceil_mode', 'layout', 'count_include_pad'], **kwargs)
+
+def avg_pool2d(X, name=None, op_name=None, pool_size=None, dilation=(1,1), strides=(0,0), padding=(0,0,0,0), ceil_mode=False, layout='NCHW', count_include_pad=True, extra_attrs=None):
+    return AvgPool2D(X, name, op_name, pool_size, dilation, strides, padding, ceil_mode, layout, count_include_pad, extra_attrs)
+
 
 @dataclass(init=False)
 class MaxPool2D(symbol.Symbol):
@@ -305,21 +346,41 @@ class MaxPool2D(symbol.Symbol):
 
     @property
     def pool_size(self) -> typing.Tuple[int, int]:
-        default_val = (2, 2)
-        return self.attrs['pool_size'] if 'pool_size' in self.attrs else default_val
+        assert 'pool_size' in self.attrs
+        return self.attrs['pool_size']
+    @property
+    def strides(self) -> typing.Tuple[int, int]:
+        default_val = (0, 0)
+        return self.attrs['strides'] if 'strides' in self.attrs else default_val
+    @property
+    def dilation(self) -> typing.Tuple[int, int]:
+        default_val = (1, 1)
+        return self.attrs['dilation'] if 'dilation' in self.attrs else default_val
+    @property
+    def padding(self) -> typing.Tuple[int, int, int, int]:
+        default_val = (0, 0, 0, 0)
+        return self.attrs['padding'] if 'padding' in self.attrs else default_val
+    @property
+    def ceil_mode(self) -> bool:
+        default_val = False
+        return self.attrs['ceil_mode'] if 'ceil_mode' in self.attrs else default_val
     @property
     def layout(self) -> str:
         default_val = 'NCHW'
         return self.attrs['layout'] if 'layout' in self.attrs else default_val
 
-    def __init__(self, X, name=None, op_name=None, pool_size=(2,2), layout='NCHW', extra_attrs=None):
+    def __init__(self, X, name=None, op_name=None, pool_size=None, dilation=(1,1), strides=(0,0), padding=(0,0,0,0), ceil_mode=False, layout='NCHW', extra_attrs=None):
         op_name = op_name or opns.MAX_POOL2D
         assert op_name == opns.MAX_POOL2D
-        super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'pool_size':pool_size, 'layout':layout}, extra_attrs=extra_attrs or {})
+        assert pool_size != None
+        super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'pool_size':pool_size, 'dilation':dilation, 'strides':strides, 'padding':padding, 'ceil_mode':ceil_mode, 'layout':layout}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
-        return _from_dict_attrs(cls, d, ['pool_size', 'layout'], **kwargs)
+        return _from_dict_attrs(cls, d, ['pool_size', 'dilation', 'strides', 'padding', 'ceil_mode', 'layout'], **kwargs)
+
+def max_pool2d(X, name=None, op_name=None, pool_size=None, dilation=(1,1), strides=(0,0), padding=(0,0,0,0), ceil_mode=False, layout='NCHW', extra_attrs=None):
+    return MaxPool2D(X, name, op_name, pool_size, dilation, strides, padding, ceil_mode, layout, extra_attrs)
 
 
 @dataclass(init=False)
@@ -340,6 +401,8 @@ class Softmax(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['axis'], **kwargs)
 
+def softmax(X, name=None, op_name=None, axis=None, extra_attrs=None):
+    return Softmax(X, name, op_name, axis, extra_attrs)
 
 @dataclass(init=False)
 class LogSoftmax(symbol.Symbol):
@@ -358,6 +421,9 @@ class LogSoftmax(symbol.Symbol):
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['axis'], **kwargs)
+
+def log_softmax(X, name=None, op_name=None, axis=None, extra_attrs=None):
+    return LogSoftmax(X, name, op_name, axis, extra_attrs)
 
 
 def exp(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
@@ -393,6 +459,9 @@ class Sum(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['dim', 'keepdim'], **kwargs)
 
+def sum(X, name=None, op_name=None, dim=None, keepdim=None, extra_attrs=None):
+    return Sum(X, name, op_name, dim, keepdim, extra_attrs)
+
 
 @dataclass(init=False)
 class Mean(symbol.Symbol):
@@ -417,6 +486,9 @@ class Mean(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['dim', 'keepdim'], **kwargs)
 
+def mean(X, name=None, op_name=None, dim=None, keepdim=None, extra_attrs=None):
+    return Mean(X, name, op_name, dim, keepdim, extra_attrs)
+
 
 @dataclass(init=False)
 class MaxAxis(symbol.Symbol):
@@ -440,6 +512,10 @@ class MaxAxis(symbol.Symbol):
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['dim', 'keepdim'], **kwargs)
+
+def max_axis(X, name=None, op_name=None, dim=None, keepdim=None, extra_attrs=None):
+    return MaxAxis(X, name, op_name, dim, keepdim, extra_attrs)
+
 
 def maximum(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.MAXIMUM
@@ -474,6 +550,9 @@ class Squeeze(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['dim'], **kwargs)
 
+def squeeze(X, name=None, op_name=None, dim=None, extra_attrs=None):
+    return Squeeze(X, name, op_name, dim, extra_attrs)
+
 @dataclass(init=False)
 class Flatten(symbol.Symbol):
     op_name = opns.FLATTEN
@@ -497,6 +576,9 @@ class Flatten(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['start_dim', 'end_dim'], **kwargs)
 
+def flatten(X, name=None, op_name=None, start_dim=0, end_dim=-1, extra_attrs=None):
+    return Flatten(X, name, op_name, start_dim, end_dim, extra_attrs)
+
 
 @dataclass(init=False)
 class Reshape(symbol.Symbol):
@@ -504,18 +586,21 @@ class Reshape(symbol.Symbol):
 
     @property
     def newshape(self) -> typing.Tuple[int,...]:
-        default_val = None
-        return self.attrs['newshape'] if 'newshape' in self.attrs else default_val
+        assert 'newshape' in self.attrs
+        return self.attrs['newshape']
 
     def __init__(self, X, name=None, op_name=None, newshape=None, extra_attrs=None):
         op_name = op_name or opns.RESHAPE
         assert op_name == opns.RESHAPE
+        assert newshape != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'newshape': newshape}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['newshape'], **kwargs)
 
+def reshape(X, name=None, op_name=None, newshape=None, extra_attrs=None):
+    return Reshape(X, name, op_name, newshape, extra_attrs)
 
 @dataclass(init=False)
 class Concat(symbol.Symbol):
@@ -535,6 +620,8 @@ class Concat(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['axis'], **kwargs)
 
+def concat(X, name=None, op_name=None, axis=None, extra_attrs=None):
+    return Concat(X, name, op_name, axis, extra_attrs)
 
 @dataclass(init=False)
 class Split(symbol.Symbol):
@@ -542,22 +629,26 @@ class Split(symbol.Symbol):
 
     @property
     def split_size(self) -> typing.List[int]:
-        default_val = []
-        return self.attrs['split_size'] if 'split_size' in self.attrs else default_val
+        assert 'split_size' in self.attrs
+        return self.attrs['split_size']
 
     @property
     def dim(self) -> int:
         default_val = 0
         return self.attrs['dim'] if 'dim' in self.attrs else default_val
 
-    def __init__(self, X, name=None, op_name=None, split_size=[], dim=0, extra_attrs=None):
+    def __init__(self, X, name=None, op_name=None, split_size=None, dim=0, extra_attrs=None):
         op_name = op_name or opns.SPLIT
         assert op_name == opns.SPLIT
+        assert split_size != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'split_size': split_size, 'dim': dim}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['split_size', 'dim'], **kwargs)
+
+def split(X, name=None, op_name=None, split_size=[], dim=0, extra_attrs=None):
+    return Split(X, name, op_name, split_size, dim, extra_attrs)
 
 
 @dataclass(init=False)
@@ -566,22 +657,27 @@ class Transpose(symbol.Symbol):
 
     @property
     def dim0(self) -> int:
-        default_val = 0
-        return self.attrs['dim0'] if 'dim0' in self.attrs else default_val
+        assert 'dim0' in self.attrs
+        return self.attrs['dim0']
 
     @property
     def dim1(self) -> int:
-        default_val = 0
-        return self.attrs['dim1'] if 'dim1' in self.attrs else default_val
+        assert 'dim1' in self.attrs
+        return self.attrs['dim1']
 
-    def __init__(self, X, name=None, op_name=None, dim0=0, dim1=0, extra_attrs=None):
+    def __init__(self, X, name=None, op_name=None, dim0=None, dim1=None, extra_attrs=None):
         op_name = op_name or opns.TRANSPOSE
         assert op_name == opns.TRANSPOSE
+        assert dim0 != None
+        assert dim1 != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'dim0': dim0, 'dim1': dim1}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['dim0', 'dim1'], **kwargs)
+
+def transpose(X, name=None, op_name=None, dim0=None, dim1=None, extra_attrs=None):
+    return Transpose(X, name, op_name, dim0, dim1, extra_attrs)
 
 
 @dataclass(init=False)
@@ -590,18 +686,21 @@ class BroadcastTo(symbol.Symbol):
 
     @property
     def newshape(self) -> typing.Tuple[int,...]:
-        default_val = None
-        return self.attrs['newshape'] if 'newshape' in self.attrs else default_val
+        assert 'newshape' in self.attrs
+        return self.attrs['newshape']
 
     def __init__(self, X, name=None, op_name=None, newshape=None, extra_attrs=None):
         op_name = op_name or opns.BROADCAST_TO
         assert op_name == opns.BROADCAST_TO
+        assert newshape != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'newshape': newshape}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['newshape'], **kwargs)
 
+def broadcast_to(X, name=None, op_name=None, newshape=None, extra_attrs=None):
+    return BroadcastTo(X, name, op_name, newshape, extra_attrs)
 
 @dataclass(init=False)
 class ExpandDims(symbol.Symbol):
@@ -609,18 +708,21 @@ class ExpandDims(symbol.Symbol):
 
     @property
     def newshape(self) -> typing.Tuple[int,...]:
-        default_val = None
-        return self.attrs['newshape'] if 'newshape' in self.attrs else default_val
+        assert 'newshape' in self.attrs
+        return self.attrs['newshape']
 
     def __init__(self, X, name=None, op_name=None, newshape=None, extra_attrs=None):
         op_name = op_name or opns.EXPAND_DIMS
         assert op_name == opns.EXPAND_DIMS
+        assert newshape != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'newshape': newshape}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['newshape'], **kwargs)
 
+def expand_dims(X, name=None, op_name=None, newshape=None, extra_attrs=None):
+    return ExpandDims(X, name, op_name, newshape, extra_attrs)
 
 @dataclass(init=False)
 class Tile(symbol.Symbol):
@@ -628,17 +730,22 @@ class Tile(symbol.Symbol):
 
     @property
     def dims(self) -> typing.Tuple[int,...]:
-        default_val = None
-        return self.attrs['dims'] if 'dims' in self.attrs else default_val
+        assert 'dims' in self.attrs
+        return self.attrs['dims']
 
     def __init__(self, X, name=None, op_name=None, dims=None, extra_attrs=None):
         op_name = op_name or opns.TILE
         assert op_name == opns.TILE
+        assert dims != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[X], attrs={'dims': dims}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['dims'], **kwargs)
+
+def tile(X, name=None, op_name=None, dims=None, extra_attrs=None):
+    return Tile(X, name, op_name, dims, extra_attrs)
+
 
 def where(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.WHERE
@@ -672,13 +779,16 @@ class NonMaxSuppression(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['dims'], **kwargs)
 
+def non_max_suppression(X, name=None, op_name=None, iou_threshold=0.5, score_threshold=None, extra_attrs=None):
+    return NonMaxSuppression(X, name, op_name, iou_threshold, score_threshold, extra_attrs)
+
 
 def ceil(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.CEIL
     assert op_name == opns.CEIL
     return symbol.Symbol(name=name or N.n(), op_name=op_name, args=[X], attrs={}, extra_attrs=extra_attrs or {})
 
-def rightShift(X, Y, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
+def right_shift(X, Y, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.RIGHT_SHIFT
     assert op_name == opns.RIGHT_SHIFT
     return symbol.Symbol(name=name or N.n(), op_name=op_name, args=[X, Y], attrs={}, extra_attrs=extra_attrs or {})
@@ -701,6 +811,9 @@ class Add(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['alpha'], **kwargs)
 
+def add(X, Y, name=None, op_name=None, alpha=1, extra_attrs=None):
+    return Add(X, Y, name, op_name, alpha, extra_attrs)
+
 @dataclass(init=False)
 class Sub(symbol.Symbol):
     op_name = opns.SUB
@@ -719,12 +832,16 @@ class Sub(symbol.Symbol):
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['alpha'], **kwargs)
 
+def sub(X, Y, name=None, op_name=None, alpha=1, extra_attrs=None):
+    return Sub(X, Y, name, op_name, alpha, extra_attrs)
+
+
 def mul(X, Y, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.MUL
     assert op_name == opns.MUL
     return symbol.Symbol(name=name or N.n(), op_name=op_name, args=[X, Y], attrs={}, extra_attrs=extra_attrs or {})
 
-def matMul(X, Y, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
+def mat_mul(X, Y, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.MATMUL
     assert op_name == opns.MATMUL
     return symbol.Symbol(name=name or N.n(), op_name=op_name, args=[X, Y], attrs={}, extra_attrs=extra_attrs or {})
@@ -746,6 +863,10 @@ class Div(symbol.Symbol):
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['rounding_mode'], **kwargs)
+
+def div(X, Y, name=None, op_name=None, rounding_mode=None, extra_attrs=None):
+    return Div(X, Y, name, op_name, rounding_mode, extra_attrs)
+
 
 def negative(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.NEGATIVE
@@ -783,8 +904,8 @@ class Arange(symbol.Symbol):
 
     @property
     def end(self) -> int:
-        default_val = 0
-        return self.attrs['end'] if 'end' in self.attrs else default_val
+        assert 'end' in self.attrs
+        return self.attrs['end']
 
     @property
     def start(self) -> int:
@@ -796,21 +917,26 @@ class Arange(symbol.Symbol):
         default_val = 1
         return self.attrs['step'] if 'step' in self.attrs else default_val
 
-    def __init__(self, name=None, op_name=None, end=0, start=0, step=1, extra_attrs=None):
+    def __init__(self, name=None, op_name=None, end=None, start=0, step=1, extra_attrs=None):
         op_name = op_name or opns.ARANGE
         assert op_name == opns.ARANGE
+        assert end != None
         super().__init__(name=name or N.n(), op_name=op_name, args=[], attrs={'end': end, 'start': start, 'step': step}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         return _from_dict_attrs(cls, d, ['end', 'start', 'step'], **kwargs)
 
-def zerosLike(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
+def arange(name=None, op_name=None, end=None, start=0, step=1, extra_attrs=None):
+    return Arange(name, op_name, end, start, step, extra_attrs)
+
+
+def zeros_like(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.ZEROS_LIKE
     assert op_name == opns.ZEROS_LIKE
     return symbol.Symbol(name=name or N.n(), op_name=op_name, args=[X], attrs={}, extra_attrs=extra_attrs or {})
 
-def onesLike(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
+def ones_like(X, name=None, op_name=None, extra_attrs=None) -> symbol.Symbol:
     op_name = op_name or opns.ONES_LIKE
     assert op_name == opns.ONES_LIKE
     return symbol.Symbol(name=name or N.n(), op_name=op_name, args=[X], attrs={}, extra_attrs=extra_attrs or {})
@@ -860,11 +986,11 @@ _register_op_map(opns.GREATER)(greater)
 _register_op_map(opns.NON_MAX_SUPRESSION)(NonMaxSuppression)
 
 _register_op_map(opns.CEIL)(ceil)
-_register_op_map(opns.RIGHT_SHIFT)(rightShift)
+_register_op_map(opns.RIGHT_SHIFT)(right_shift)
 
 _register_op_map(opns.ADD)(Add)
 _register_op_map(opns.SUB)(Sub)
-_register_op_map(opns.MATMUL)(matMul)
+_register_op_map(opns.MATMUL)(mat_mul)
 _register_op_map(opns.DIV)(Div)
 _register_op_map(opns.NEGATIVE)(negative)
 _register_op_map(opns.ABS)(abs)
@@ -873,8 +999,8 @@ _register_op_map(opns.SQRT)(sqrt)
 _register_op_map(opns.POW)(pow)
 _register_op_map(opns.PASS)(pass_)
 _register_op_map(opns.ARANGE)(Arange)
-_register_op_map(opns.ZEROS_LIKE)(zerosLike)
-_register_op_map(opns.ONES_LIKE)(onesLike)
+_register_op_map(opns.ZEROS_LIKE)(zeros_like)
+_register_op_map(opns.ONES_LIKE)(ones_like)
 
 
 # Add default register Class for MRT OP Not Implemented!
@@ -895,4 +1021,3 @@ _register_op_map(opns.BATCH_FLATTEN)(symbol.Symbol)
 _register_op_map(opns.STRIDED_SLICE)(symbol.Symbol)
 _register_op_map(opns.SLICE_LIKE)(symbol.Symbol)
 _register_op_map(opns.GET_VALID_COUNT)(symbol.Symbol)
-
