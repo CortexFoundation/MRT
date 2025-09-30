@@ -113,7 +113,10 @@ class _BaseSymbol:
         #  assert self.shape == other.shape, "%s vs.\n %s" % (self, other)
         #  assert self.dtype == other.dtype , "%s vs.\n %s" % (self, other)
         data = other.to_dict()
-        data.update(self.to_dict())
+        data_new = self.to_dict()
+        data.update(data_new)
+
+        data["extra_attrs"] = other.extra_attrs if self.extra_attrs == {} else data["extra_attrs"]
         # copy extra attrs by default.
         #  data["extra_attrs"] = other.extra_attrs
         return type(other).from_dict(data, **kwargs)
