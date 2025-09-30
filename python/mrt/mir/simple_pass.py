@@ -75,6 +75,7 @@ class InferPass(SimplePass):
 
     """custom visit of graph
     calling custom_func for all op_name
+    according to how custom_run implemented, params is from argument or class_property
     return: head symbol processed
     """
     def custom_visits_with_params(self, custom_run: _symbol._TransformerParamT, name: str = "", once: bool = False) -> _symbol.Symbol:
@@ -96,15 +97,15 @@ class InferPass(SimplePass):
         self.params[name] = array
         return opclass.var(array, shape=shape, dtype=dtype)
 
-    def from_np_data(self, data: np.ndarray, dtype, prefix=None) -> _symbol.Symbol:
+    def from_np_data(self, sym:_symbol.Symbol, data: np.ndarray, dtype, prefix=None) -> _symbol.Symbol:
         name = N.n(prefix=prefix)
         # some data is np.float/int type, use np.array to wrap it.
         data = np.array(data)
         self.params[name] = data.astype(dtype)
-        return opclass.var(name, shape=data.shape, dtype=dtype)#.like(self)
+        return opclass.var(name, shape=data.shape, dtype=dtype).like(sym)
 
-    def from_const_data(self, data: typing.Union[int, float], dtype) -> _symbol.Symbol:
-        return self.from_np_data(data, dtype)
+    def from_const_data(self, sym:_symbol.Symbol, data: typing.Union[int, float], dtype) -> _symbol.Symbol:
+        return self.from_np_data(sym, data, dtype)
 
 
 # Register MRT all op's default_visit_op function
@@ -144,15 +145,17 @@ class FuseNaiveSoftmaxPass(SimplePass):
 
 
 class FuseMeanPass(InferPass):
-    def visit_mean(self, sym: _symbol.Symbol) -> _symbol.Symbol:
-        if sym.op_name == opns.MEAN:
-            X = sym.args[0]
-            out = opclass.Sum(X, **sym.attrs)
-            scale = self.from_np_data(np.array(
-                1. * product(out.shape) / product(X.shape)), dtype=out.dtype)
-            out = opclass.mul(out, scale)
-            return out
-        return sym
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            if sym.op_name == opns.MEAN:
+                X = sym.args[0]
+                out = opclass.Sum(X, **sym.attrs).like(sym)
+                scale = self.from_np_data(sym, np.array(
+                    1. * product(out.shape) / product(X.shape)), dtype=out.dtype)
+                out = opclass.mul(out, scale)
+                return out
+            return sym
+        return custom_run
 
 
 class FuseConstantPass(InferPass):
@@ -161,9 +164,8 @@ class FuseConstantPass(InferPass):
     def np_is_zero(self, data) -> float:
         return np.abs(data).max() < self.threshold
 
-
     def get_run(self) -> _symbol._TransformerParamT:
-        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:#: _symbol._TransformerParamT
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
             if self.is_operator(sym) and all([self.is_param(arg) for arg in sym.args]):
                 data = inference.run_single_params(
                         sym, [self.get_as_numpy(a) for a in sym.args])
@@ -178,7 +180,7 @@ class FuseConstantPass(InferPass):
                     return args[0]
             elif sym.is_op(opns.SLICE_LIKE):
                 if not self.is_param(sym.args[0]):
-                    return None
+                    return sym
                 a, b = sym.args
                 data = inference.run_single_params(
                     sym, [self.get_as_numpy(a), np.zeros(b.shape, b.dtype)])
@@ -194,24 +196,150 @@ class FuseConstantPass(InferPass):
 
 
 class FuseBatchNormPass(InferPass):
-    def visit_nn_batch_norm(self, sym: _symbol.Symbol) -> _symbol.Symbol:
-        if sym.op_name == opns.BATCH_NORM:
-            X, Gamma, Beta, Mean, Var = sym.args
-            Gamma = self.get_param(Gamma)
-            Beta = self.get_param(Beta)
-            Mean = self.get_param(Mean)
-            Var = self.get_param(Var)
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: opclass.BatchNorm, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            if sym.op_name == opns.BATCH_NORM:
+                X, Gamma, Beta, Mean, Var = sym.args
+                Gamma = self.get_param(Gamma)
+                Beta = self.get_param(Beta)
+                Mean = self.get_param(Mean)
+                Var = self.get_param(Var)
+
+                assert sym.axis == 1
+                Beta = Beta if sym.center else 0
+                Gamma = Gamma if sym.scale else 1
+
+                # (x - mean) / sqrt(var + epsilon) * gamma + beta
+                Gamma = Gamma / np.sqrt(Var + sym.epsilon)
+                # (x - mean) * gamma + beta
+                # x * gamma + (beta - mean * gamma)
+                bias: np.ndarray = (Beta - Mean * Gamma)
+                K = Gamma.shape[0]
+
+                if X.is_op(opns.CONV2D):
+                    A, W = X.args
+                    assert X.kernel_layout == "OIHW"
+                    assert W.shape[0] == K
+                    # (A * W) * gamma + bias
+                    # A * (W * gamma) + bias
+                    W_data = self.get_as_numpy(W) * Gamma.reshape(K, 1, 1, 1)
+                    W_sym = self.from_np_data(W, W_data, W.dtype)
+                    out = op.nn_conv2d(A, W_sym, **X.attrs)
+                elif X.is_op(opns.DENSE):
+                    A, W = X.args
+                    # (A * W) * gamma + bias
+                    # A * (W * gamma) + bias
+                    W_data = self.get_as_numpy(W) * Gamma.reshape(K, 1)
+                    W_sym = self.from_np_data(W, W_data, W.dtype)
+                    out = op.nn_dense(A, W_sym, **X.attrs)
+                else:
+                    reshp = [s if i == sym.axis else 1 \
+                            for i, s in enumerate(X.shape)]
+                    W = self.from_np_data(X, Gamma.reshape(reshp), X.dtype)
+                    out = opclass.mul(X, W)
+
+                bias = bias.reshape([s if i == sym.axis else 1 \
+                        for i, s in enumerate(out.shape)])
+                B = out.like(sym)
+                B = self.from_np_data(B, bias, dtype=B.dtype)
+                return opclass.add(out, B).like(sym)
+
             return sym
-        return sym
+        return custom_run
 
 
 class FuseDividePass(InferPass):
-    def visit_divide(self, sym: _symbol.Symbol) -> _symbol.Symbol:
-        if sym.op_name == opns.DIV:
-            argA = sym.args[0]
-            argB = sym.args[1]
-            assert self.is_param(argB), f'NotParam: {argB}'
-            argB = self.from_np_data(1. / self.get_as_numpy(argB), dtype=argB.dtype)
-            return opclass.MRT_OP_MAP[opns.MUL](argA, argB)
-        return sym
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            if sym.op_name == opns.DIV:
+                argA = sym.args[0]
+                argB = sym.args[1]
+                assert self.is_param(argB), f'NotParam: {argB}'
+                argB = self.from_np_data(sym, 1. / self.get_as_numpy(argB), dtype=argB.dtype)
+                out = opclass.mul(argA, argB)
+                return out.like(sym)
+            return sym
+        return custom_run
 
+
+class FuseLeakyReLU(InferPass):
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            if sym.op_name == opns.LEAKY_RELU:
+                alpha = self.from_const_data(sym, sym.alpha, dtype=float)
+                X = sym.args[0]
+                out = opclass.relu(opclass.negative(X))
+                out = opclass.mul(alpha, out)
+                return opclass.sub(opclass.relu(X), out)
+            return sym
+        return custom_run
+
+class FuseAdaptiveAvgPool2D(InferPass):
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            if sym.op_name == opns.ADAPTIVE_AVG_POOL2D:
+                X = sym.args[0]
+                assert sym.layout == "NCHW"
+                inp_shap = X.shape[2:]
+                out_size = sym.output_size or inp_shap
+                if not isinstance(out_size, (list, tuple)):
+                    out_size = (out_size, out_size)
+                sym.output_size = out_size
+
+                assert len(X.shape) == 4
+                if all([s == 1 for s in sym.output_size]):
+                    scale = np.array(1 / np.prod(X.shape[-2:]))
+                    out = opclass.Sum(X, dim=list(range(4))[-2:], keepdims=True)
+                    scale = self.from_np_data(sym, scale.astype(X.dtype))
+                    return opclass.mul(out, scale).like(self)
+                elif out_size[0] > inp_shap[0] or out_size[1] > inp_shap[1]:
+                    assert all([s == 1 for s in inp_shap])
+                    # TODO: fix opclass repeat
+                    out = opclass.repeat(X, repeats=out_size[0], axis=-2)
+                    out = opclass.repeat(out, repeats=out_size[1], axis=-1)
+                    return out.like(self)
+
+                # calculate the attributes refers to:
+                # https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work
+                strides = [i // o for i, o in zip(inp_shap, out_size)]
+                kernel = [i-(o-1)*s for i, o, s in zip(inp_shap, out_size, strides)]
+                attrs = {
+                    "kernel_size": kernel,
+                    "strides": strides,
+                    "padding": (0, 0),
+                    "dilation": (1, 1),
+                    "data_layout": sym.layout,
+                    "groups": X.shape[1],
+                    "channels": X.shape[1],
+                }
+                W_shape = (X.shape[1], 1, *kernel)
+                W = self.from_np_data(X, np.full(W_shape, 1 / product(kernel)), dtype=X.dtype)
+                out = opclass.Conv2D(X, W, **attrs)
+                return out.like(sym)
+            return sym
+        return custom_run
+    
+
+class FuseAvgPool2D(InferPass):
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            return sym
+        return custom_run
+
+class Spliter(InferPass):
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            return sym
+        return custom_run
+
+class Merger(InferPass):
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            return sym
+        return custom_run
+
+class Calibrator(InferPass):
+    def get_run(self) -> _symbol._TransformerParamT:
+        def custom_run(sym: _symbol.Symbol, params: typing.Optional[ParametersT] = None) -> _symbol.Symbol:
+            return sym
+        return custom_run

@@ -95,22 +95,26 @@ class Conv2D(symbol.Symbol):
         assert 'kernel_size' in self.attrs
         return self.attrs['kernel_size']
 
+    @property
+    def kernel_layout(self) -> str:
+        default_val = 'OIHW'
+        return self.attrs['kernel_layout'] if 'kernel_layout' in self.attrs else default_val
 
     # Follows (*args, name, **attrs)
-    def __init__(self, X, W, name=None, op_name=None, strides=(1,1), padding=(0,0,0,0), groups=1, dilation=(1,1), extra_attrs=None):
+    def __init__(self, X, W, name=None, op_name=None, strides=(1,1), padding=(0,0,0,0), groups=1, dilation=(1,1), kernel_layout='OIHW', extra_attrs=None):
         op_name = op_name or opns.CONV2D
         assert op_name == opns.CONV2D
         assert len(W.shape) == 4, f'Wrong Weight Shape for Conv2D: {W.shape}'
         kernel_size = (W.shape[2], W.shape[3])
-        super().__init__(name=name or N.n(), op_name=op_name, args=[X,W], attrs={'strides':strides, 'padding':padding, 'groups':groups, 'dilation':dilation, 'kernel_size':kernel_size}, extra_attrs=extra_attrs or {})
+        super().__init__(name=name or N.n(), op_name=op_name, args=[X,W], attrs={'strides':strides, 'padding':padding, 'groups':groups, 'dilation':dilation, 'kernel_size':kernel_size, 'kernel_layout': kernel_layout}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
         # Auto inferred 'kernel_size'
-        return _from_dict_attrs(cls, d, ['strides', 'padding', 'groups', 'dilation'], **kwargs)
+        return _from_dict_attrs(cls, d, ['strides', 'padding', 'groups', 'dilation', 'kernel_layout'], **kwargs)
 
-def conv2d(X, W, name=None, op_name=None, strides=(1,1), padding=(0,0,0,0), groups=1, dilation=(1,1), extra_attrs=None):
-    return Conv2D(X, W, name, op_name, strides, padding, groups, dilation, extra_attrs)
+def conv2d(X, W, name=None, op_name=None, strides=(1,1), padding=(0,0,0,0), groups=1, dilation=(1,1), kernel_layout='OIHW', extra_attrs=None):
+    return Conv2D(X, W, name, op_name, strides, padding, groups, dilation, kernel_layout, extra_attrs)
 
 
 @dataclass(init=False)
@@ -181,19 +185,29 @@ class BatchNorm(symbol.Symbol):
     @property
     def momentum(self) -> float:
         default_val = 0.1
+        return self.attrs['momentum'] if 'momentum' in self.attrs else default_val
+
+    @property
+    def center(self) -> bool:
+        default_val = True
         return self.attrs['center'] if 'center' in self.attrs else default_val
 
-    def __init__(self, X, Gamma, Beta, Mean, Var, name=None, op_name=None, axis:int = 1, epsilon:float = 1e-5, momentum:float = 0.1, extra_attrs=None):
+    @property
+    def scale(self) -> bool:
+        default_val = True
+        return self.attrs['scale'] if 'scale' in self.attrs else default_val
+
+    def __init__(self, X, Gamma, Beta, Mean, Var, name=None, op_name=None, axis:int = 1, epsilon:float = 1e-5, momentum:float = 0.1, center=True, scale=True, extra_attrs=None):
         op_name = op_name or opns.BATCH_NORM
         assert op_name == opns.BATCH_NORM
-        super().__init__(name=name or N.n(), op_name=op_name, args=[X, Gamma, Beta, Mean, Var], attrs={'axis': axis, 'epsilon': epsilon, 'momentum': momentum}, extra_attrs=extra_attrs or {})
+        super().__init__(name=name or N.n(), op_name=op_name, args=[X, Gamma, Beta, Mean, Var], attrs={'axis': axis, 'epsilon': epsilon, 'momentum': momentum, 'center': center, 'scale': scale}, extra_attrs=extra_attrs or {})
 
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
-        return _from_dict_attrs(cls, d, ['axis', 'epsilon', 'momentum'], **kwargs)
+        return _from_dict_attrs(cls, d, ['axis', 'epsilon', 'momentum', 'center', 'scale'], **kwargs)
 
-def batch_norm(X, Gamma, Beta, Mean, Var, name=None, op_name=None, axis:int = 1, epsilon:float = 1e-5, momentum:float = 0.1, extra_attrs=None):
-    return BatchNorm(X, Gamma, Beta, Mean, Var, name, op_name, axis, epsilon, momentum, extra_attrs)
+def batch_norm(X, Gamma, Beta, Mean, Var, name=None, op_name=None, axis:int = 1, epsilon:float = 1e-5, momentum:float = 0.1, center=True, scale=True, extra_attrs=None):
+    return BatchNorm(X, Gamma, Beta, Mean, Var, name, op_name, axis, epsilon, momentum, center, scale, extra_attrs)
 
  
 @dataclass(init=False)
