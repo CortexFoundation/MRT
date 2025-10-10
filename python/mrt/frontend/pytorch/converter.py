@@ -14,7 +14,7 @@ from mrt.mir import op
 from mrt.mir.opns import *
 from mrt.common.types import ParametersT
 from mrt.common.utils import N
-from .types import data_to_mrt, data_to_torch
+from .types import data_to_mrt, data_to_torch, dtype_from_mrt
 
 __all__ = ["pytorch_to_mrt", "mrt_to_pytorch", "type_infer"]
 
@@ -93,7 +93,7 @@ MRT_TORCH_OP_MAP = FunctionMapper({
         FLATTEN: torch.flatten,
         CLIP: torch.clip,
         AS_TYPE: lambda x, dtype: x.to(
-            dtype=getattr(torch, dtype)),
+            dtype=dtype_from_mrt(dtype)),
         **map_function(
             func_map={ CONCAT: torch.cat, },
             arg_map=lambda args: [ args, ],

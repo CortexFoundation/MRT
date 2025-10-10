@@ -137,7 +137,7 @@ class Trace:
         for i in range(max_iter_num or 99999999999999):
             # all trace use same input data to compare accuracy.
             data = t._dataset.next()
-            print("iter data:", data[0].shape, data[0].flatten()[:10], data[1])
+            #  print("iter data:", data[0].shape, data[0].flatten()[:10], data[1])
             dls = [data for t in all_traces]
             if any([dl is None for dl in dls]):
                 break

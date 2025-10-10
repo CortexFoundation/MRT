@@ -67,7 +67,10 @@ def _tuple_get_item(symbol: Symbol) -> Symbol:
     symbol.shape = X.shape[index]
     symbol.dtype = X.dtype[index]
 
-@register_type_infer(opns.REQUANT, opns.PCLIP, opns.RS_PCLIP)
+@register_type_infer(
+        opns.REQUANT,
+        opns.RIGHT_SHIFT,
+        opns.PCLIP, opns.RS_PCLIP)
 def _type_like_first(symbol: Symbol) -> Symbol:
     X: Symbol = symbol.args[0]
     symbol.shape = X.shape

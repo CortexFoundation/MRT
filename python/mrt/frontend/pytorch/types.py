@@ -5,6 +5,12 @@ import numpy as np
 
 from mrt.common.types import *
 
+def dtype_to_mrt(data: torch.dtype) -> str:
+    return str(data).replace("torch.", "")
+
+def dtype_from_mrt(data: str) -> torch.dtype:
+    return getattr(torch, data)
+
 def data_to_mrt(data: typing.Union[torch.Tensor, list]) -> OpNumpyT:
     def _as_numpy(data):
         if isinstance(data, torch.Tensor):
@@ -12,7 +18,7 @@ def data_to_mrt(data: typing.Union[torch.Tensor, list]) -> OpNumpyT:
         elif isinstance(data, torch.nn.Parameter):
             return _as_numpy(data.data)
         elif isinstance(data, torch.dtype):
-            return str(data).replace("torch.", "")
+            return dtype_to_mrt(data)
             #  keys = [ "float", "int", "bool" ]
             #  for k in keys:
             #      if k in str(data):
