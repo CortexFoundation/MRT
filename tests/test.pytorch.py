@@ -106,6 +106,8 @@ with fp.SimConfig:
     sim_tr = dis_tr.exporter(tr_name="sim").log()
 with fp.SimIntRequantConfig:
     sim_int_quant_tr = dis_tr.exporter(tr_name="sim-int-quant").log()
+with fp.SimIntDataConfig:
+    sim_int_data_tr = dis_tr.exporter(tr_name="sim-int-data").log()
 
 #  sim_tr = dis_tr.export("sim").log()
 #  sim_clip_tr = dis_tr.export("sim-clip").log()
@@ -116,6 +118,7 @@ with fp.SimIntRequantConfig:
 tr.validate_accuracy(
         sim_tr,
         sim_int_quant_tr,
+        sim_int_data_tr,
         #  sim_clip_tr,
         #  sim_round_tr,
         #  sim_quant_tr,

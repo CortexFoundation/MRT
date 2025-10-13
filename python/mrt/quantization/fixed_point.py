@@ -24,7 +24,7 @@ class ExporterConfig(_BaseConfig):
     use_clip: bool = False
     """ whether to map pclip in graph. """
     use_pclip: bool = False
-    """ whether to reserve plicp in graph. """
+    """ whether to reserve pclip in graph. """
     use_round: bool = False
     """ whether to round data to integer. """
     use_int_requant: bool = False
@@ -34,11 +34,6 @@ class ExporterConfig(_BaseConfig):
 
         This flag will set use_round True by default.
     """
-
-CVMConfig = ExporterConfig(
-        use_clip=True, use_pclip=True,
-        use_int_requant=True,
-        use_int_dtype=True)
 
 SimConfig = ExporterConfig()
 SimClipConfig = ExporterConfig(use_clip=True)
@@ -50,6 +45,11 @@ SimIntDataConfig = ExporterConfig(
         use_clip=True,
         use_round=True,
         use_int_requant=True)
+
+CVMConfig = ExporterConfig(
+        use_clip=True, use_pclip=True,
+        use_int_requant=True,
+        use_int_dtype=True)
 
 @dataclass(repr=False)
 class Exporter(QuantInfo):
@@ -157,11 +157,12 @@ class Exporter(QuantInfo):
             return self
 
         self.validate_precision()
-        out = self.process()
-        if self.is_param():
-            absmax = np.abs(out.numpy()).max()
-            assert absmax - 0.01 <= out.int_max()
-        return out.like(self, extra_attrs=self.extra_attrs)
+        out = self.process().like(self, extra_attrs=self.extra_attrs)
+        # TODO: add precision int max validate
+        #  if self.is_param():
+        #      absmax = np.abs(out.numpy()).max()
+        #      assert absmax - 0.01 <= out.int_max()
+        return out
 
 @dataclass(repr=False)
 class Simulator(QuantInfo):

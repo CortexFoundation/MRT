@@ -277,8 +277,10 @@ class Trace:
                 **kwargs)
 
     def exporter(self, **kw):
+        #TODO: add fuse constant and precision check
         return self.checkpoint_run(
                 fp.Exporter.get_transformer(),
+                fuse.FuseConstant.get_transformer(),
                 **kw)
 
     def export(self, target: str, use_simulator: bool = True, **kwargs):
