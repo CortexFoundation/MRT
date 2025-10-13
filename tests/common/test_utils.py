@@ -20,20 +20,20 @@ class TestN:
         assert N.n() == "%0"
 
         with N("scope1"):
-            assert N.n() == "scope1.%0"
-            assert N.n() == "scope1.%1"
+            assert N.n() == "scope1_%0"
+            assert N.n() == "scope1_%1"
         
         # Back to global scope. Counter of global scope continues.
         assert N.n() == "%1"
 
     def test_n_nested_scopes(self):
         with N("scope1"):
-            assert N.n() == "scope1.%0"
+            assert N.n() == "scope1_%0"
             with N("scope2"):
-                assert N.n() == "scope2.%0"
-                assert N.n() == "scope2.%1"
+                assert N.n() == "scope2_%0"
+                assert N.n() == "scope2_%1"
             # Back to scope1. Counter of scope1 continues.
-            assert N.n() == "scope1.%1"
+            assert N.n() == "scope1_%1"
         
         # Back to global scope
         assert N.n() == "%0" # Global counter was not used yet.

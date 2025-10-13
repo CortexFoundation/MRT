@@ -32,24 +32,24 @@ class Scope:
         self.last_scope = self.__CURR_GLOBAL_INSTANCE__
 
     def __enter__(self) -> SelfScope:
-        self.register_global()
+        self.register_global(self)
         return self
 
     def __exit__(self, *args):
         """ Trace back last scope """
-        if self.last_scope:
-            self.last_scope.register_global()
+        self.register_global(self.last_scope)
 
-    def register_global(self: SelfScope) -> SelfScope:
+    @classmethod
+    def register_global(cls: SelfScope, ins: SelfScope) -> SelfScope:
         """ register global scope """
-        self.__CURR_GLOBAL_INSTANCE__ = self
-        return self
+        cls.__CURR_GLOBAL_INSTANCE__ = ins
+        return ins
 
     @classmethod
     def G(cls) -> SelfScope:
         """ Get Current Global Instance. """
         sc = cls.__CURR_GLOBAL_INSTANCE__ or cls()
-        sc.register_global()
+        sc.register_global(sc)
         return sc
 
 class N(Scope):
