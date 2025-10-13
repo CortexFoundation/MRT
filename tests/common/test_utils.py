@@ -1,13 +1,13 @@
 import pytest
 import threading
-from mrt.common.utils import N
+from mrt.common.utils import N, Scope
 
 class TestN:
     def setup_method(self):
         """Reset global N instance before each test method."""
         # Create a new N instance and register it as the global one.
         # This instance will have name="" and counter=0.
-        N.register_global(N())
+        N().register_global()
 
     def test_n_global_scope(self):
         assert N.n() == "%0"
@@ -19,10 +19,10 @@ class TestN:
         # Global scope name allocation
         assert N.n() == "%0"
 
-        with N("scope1"):
+        with N("scope1") as nc:
             assert N.n() == "scope1_%0"
             assert N.n() == "scope1_%1"
-        
+
         # Back to global scope. Counter of global scope continues.
         assert N.n() == "%1"
 
