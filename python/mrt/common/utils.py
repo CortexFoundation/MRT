@@ -23,13 +23,14 @@ class Scope:
     """
         1. Scope may have many instance
         2. Scope can enter/exit recursively
-        3. Scope has Global instance by default.
+        3. Scope has Global instance per class type.
     """
     __CURR_GLOBAL_INSTANCE__: typing.Optional[SelfScope] = None
 
-    def __init__(self):
-        """ Scope will auto record current global scope. """
-        self.last_scope = self.__CURR_GLOBAL_INSTANCE__
+    # remove init function to avoid dataclass subclass bugs.
+    #  def __init__(self):
+    #      """ Scope will auto record current global scope. """
+    #      self.last_scope = self.__CURR_GLOBAL_INSTANCE__
 
     def __enter__(self) -> SelfScope:
         return self.register_global()
@@ -39,20 +40,23 @@ class Scope:
         type(self).__CURR_GLOBAL_INSTANCE__ = self.last_scope
 
     def register_global(self: SelfScope) -> SelfScope:
-        """ register global scope, class variable must be set by class type. """
+        """ register global scope. """
+        # record last scope
+        self.last_scope = self.__CURR_GLOBAL_INSTANCE__
+        # class variable must be set by class type. 
         type(self).__CURR_GLOBAL_INSTANCE__ = self
         return self
 
     @classmethod
     def G(cls) -> SelfScope:
         """ Get Current Global Instance. """
-        sc = cls.__CURR_GLOBAL_INSTANCE__ or cls()
-        sc.register_global()
-        return sc
+        if cls.__CURR_GLOBAL_INSTANCE__ is None:
+            return cls().register_global()
+        return cls.__CURR_GLOBAL_INSTANCE__
 
 class N(Scope):
     def __init__(self, name=""):
-        super().__init__()
+        #  super().__init__()
         self.counter = 0
         self.scope_name = name
         self.lock = threading.Lock()
