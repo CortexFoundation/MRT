@@ -10,6 +10,12 @@ def map_function(
         attr_map: dict = {},
         #  attr_def: dict = {},
         ):
+    """ Sugar Method to create target function for existing library.
+
+        func_map: map original function name to target implemented func.
+        arg_map: make process for arguments
+        attr_map: make attributes to transform automatically.
+    """
     def _update_attrs(old_attrs):
         new_attrs = {}
         #  for k, def_val in attr_def:
@@ -34,11 +40,22 @@ def map_function(
     return {k: _wrapper(f) for k, f in func_map.items()}
 
 class FunctionMapper(dict):
+    """
+        Key: original function name.
+        Val: target implemented function to be called.
+    """
     def add_mapper(self, func_map: dict):
         for k in func_map:
             if k in self:
                 logger.warning(f"func:{k} already exists in mapper, override.")
         self.update(func_map)
+
+    def map_functions(self, *func_names: list):
+        def _wrapper(func):
+            self.add_mapper({f: func for f in func_names})
+            return func
+        return _wrapper
+
 
     def add_arg_mapper(self, func_map):
         def _wrapper(arg_map_func):

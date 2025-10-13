@@ -276,6 +276,11 @@ class Trace:
                 PrecisionRevisor.get_transformer(),
                 **kwargs)
 
+    def exporter(self, **kw):
+        return self.checkpoint_run(
+                fp.Exporter.get_transformer(),
+                **kw)
+
     def export(self, target: str, use_simulator: bool = True, **kwargs):
         assert target in ["sim-clip-round", "sim-clip", "sim-round", "sim", "fixpt"]
         kwargs.setdefault("tr_name", target)
@@ -299,8 +304,8 @@ class Trace:
                 self.symbol, self.params,
                 name=self.name, **kwargs)
 
-    def log(self, **kwargs):
-        fname = self._get_checkpoint_path(self.name) + ".log"
+    def log(self, name=None, **kwargs):
+        fname = self._get_checkpoint_path(name or self.name) + ".log"
         print("Log   Trace: {:20} into {}".format(
             self.name, fname))
         with open(fname, "w") as f:

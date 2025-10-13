@@ -115,6 +115,13 @@ def _torch_batch_norm_args_reorder(args):
     # reorder in [input, running_mean, running_var, weight, bias]
     return [ args[0], args[3], args[4], args[1], args[2] ]
 
+@MRT_TORCH_OP_MAP.map_functions(RIGHT_SHIFT)
+def torch_right_shift(A: torch.Tensor, B: torch.Tensor):
+    A = A.to(torch.int32)
+    B = B.to(torch.int8)
+    out = torch.bitwise_right_shift(A, B)
+    return out.to(torch.float32)
+
 def create_parameters(ep: torch.export.ExportedProgram):
     """Create relax input vars."""
     parameters_buffers_constants = OrderedDict()

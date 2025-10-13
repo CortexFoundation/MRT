@@ -98,17 +98,27 @@ with TraceConfig(
         #  log_before_tr_or_cbs=[ "calibrate_run_0", ],
         ):
     dis_tr = tr.discrete()
-sim_tr = dis_tr.export("sim").log()
-sim_clip_tr = dis_tr.export("sim-clip").log()
-sim_round_tr = dis_tr.export("sim-round").log()
-sim_quant_tr = dis_tr.export("sim-clip-round").log()
-fixpt_tr = dis_tr.export("fixpt").log()
+
+from mrt.quantization import fixed_point as fp
+from mrt.common.config import LogConfig
+#  with LogConfig(log_vot_cbs=[ "Exporter" ])
+with fp.SimConfig:
+    sim_tr = dis_tr.exporter(tr_name="sim").log()
+with fp.SimIntRequantConfig:
+    sim_int_quant_tr = dis_tr.exporter(tr_name="sim-int-quant").log()
+
+#  sim_tr = dis_tr.export("sim").log()
+#  sim_clip_tr = dis_tr.export("sim-clip").log()
+#  sim_round_tr = dis_tr.export("sim-round").log()
+#  sim_quant_tr = dis_tr.export("sim-clip-round").log()
+#  fixpt_tr = dis_tr.export("fixpt").log()
 
 tr.validate_accuracy(
         sim_tr,
-        sim_clip_tr,
-        sim_round_tr,
-        sim_quant_tr,
+        sim_int_quant_tr,
+        #  sim_clip_tr,
+        #  sim_round_tr,
+        #  sim_quant_tr,
         max_iter_num=200,
         **config)
 sys.exit()

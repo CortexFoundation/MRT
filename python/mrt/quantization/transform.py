@@ -61,7 +61,7 @@ class WithParameters(Symbol):
     def from_const_data(self, data: typing.Union[int, float]) -> WithParameters:
         return self.from_np_data(data)
 
-    def from_np_data(self, data: np.ndarray, prefix=None) -> Symbol:
+    def from_np_data(self, data: np.ndarray, prefix="%") -> Symbol:
         name = N.n(prefix=prefix)
         # some data is np.float/int type, use np.array to wrap it.
         data = np.array(data)
