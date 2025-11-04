@@ -18,7 +18,7 @@ SamplingFuncT = typing.Callable[
 @dataclass(repr=False)
 class Calibrator(Transformer):
     """ skip dump, and restore from np_data. """
-    raw_data: OpOutputT | None = field(repr=False, default=None)
+    raw_data: typing.Dict[str, OpOutputT] = field(repr=False, default_factory=dict)
     """ calibrate may be processed multi-times """
     data: typing.List[OpNumpyT] = field(default_factory=list)
 
@@ -43,6 +43,8 @@ class Calibrator(Transformer):
             sampling_func: SamplingFuncT = None,
             **kwargs):
         kwargs.pop("origin", None)
+        self.raw_data = kwargs.pop("raw_data", {})
+        self.data = kwargs.pop("out_data", [])
 
         if self.is_input():
             out = data_dict.get(self.name, data)
@@ -51,10 +53,10 @@ class Calibrator(Transformer):
         elif self.is_param():
             out = self.params[self.name]
         else:
-            single_op = op.retrieve_operator(self)
+            single_op = op.retrieve_operator(self.graph)
             out = inference.run_single(
                     single_op,
-                    [a.raw_data for a in self.args],
+                    [self.raw_data[a.name] for a in self.args],
                     **kwargs)
 
         assert isinstance(out, (np.ndarray, list)), type(out)
@@ -65,7 +67,7 @@ class Calibrator(Transformer):
             self._assert([o.dtype.name for o in out], self.dtype)
             self._assert([o.shape for o in out], self.shape)
 
-        self.raw_data = out
+        self.raw_data[self.name] = out
         if sampling_func is not None:
             out = sampling_func(out)
         self.data.append(out)
@@ -103,15 +105,18 @@ class Sampling(Transformer):
     def sampling(cls, np_data: np.ndarray) -> typing.Any:
         raise NotImplementedError()
 
-    def __call__(self, origin: Calibrator, **kw):
+    def __call__(self, origin: Symbol, **kw):
         print(type(origin), origin)
+        origin_data = kw.pop('origin_data', [])
+        origin_data = origin_data[self.name]
+
         if self.is_op(opns.CLIP):
             # TODO: remove clip if threshold is less than a_max
             a_min, a_max = self.parsed.a_min, self.parsed.a_max
             self.data = max(abs(a_min), abs(a_max))
         else:
-            self.data = self.sampling(origin.data)
-        return self
+            self.data = self.sampling(origin_data)
+        return self.graph
 
 @dataclass(repr=False)
 class SymmetricMinMaxSampling(Sampling):

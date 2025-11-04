@@ -223,7 +223,12 @@ class Trace:
 
     def discrete(self) -> Trace:
         fuse_tr = self.fuse()
-        seg_tr = fuse_tr.checkpoint_run(seg.Spliter.get_transformer())
+
+        """Must pass params inside a dict,
+        Cause it will be unfolded separately
+        """
+        kwargs_seg = {"pointer": {"head": {}, "head_params": {}, "seg_names": []}}
+        seg_tr = fuse_tr.checkpoint_run(seg.Spliter.get_transformer(), **kwargs_seg)
 
         C = TraceConfig.G()
         calib_tr = seg_tr.calibrate(
@@ -232,7 +237,8 @@ class Trace:
         quant_tr = calib_tr.quantize()
         quant_tr = quant_tr.checkpoint_run(
                 seg.Merger.get_transformer(),
-                spliter=seg_tr.symbol)
+                spliter=seg_tr.symbol,
+                **kwargs_seg)
         return quant_tr
 
     def fuse(self, **kwargs) -> Trace:
@@ -254,8 +260,13 @@ class Trace:
     def calibrate(self, repeats: int = 1, **kwargs) -> Trace:
         assert self._dataset is not None
         tr_name = kwargs.pop("tr_name", "calibrate")
+        raw_data: typing.Dict[str, OpOutputT] = {}
+        out_data: typing.List[OpNumpyT] = []
+
         out = self
         for i in range(repeats):
+            kwargs["raw_data"] = raw_data
+            kwargs["out_data"] = out_data
             data, _ = self._dataset.next()
             out = out.checkpoint_run(
                     calib.Calibrator.get_transformer(),
@@ -265,7 +276,7 @@ class Trace:
                     **kwargs)
         out = out.checkpoint_run(
                 calib.SymmetricMinMaxSampling.get_transformer(),
-                tr_name = "%s_sampling" % tr_name)
+                tr_name = "%s_sampling" % tr_name, **{'origin_data': raw_data})
         return out
 
     def quantize(self, **kwargs):

@@ -7,8 +7,11 @@ from mrt.mir import op
 from mrt.mir.opns import *
 from mrt.mir.symbol import *
 
+from .transform import SymbolBridge
+
 @dataclass(repr=False)
-class WithScale(Symbol):
+#class WithScale(Symbol):
+class WithScale(SymbolBridge):
     @classmethod
     def _validate_scale(cls, scale, msg=None):
         if isinstance(scale, (list, tuple)):
@@ -55,13 +58,13 @@ def scale_rules(*op_names):
     return _add_rules
 
 def scale_index(s: WithScale, index: int):
-    return s.args[index].scale
+    return s.args[index].extra_attrs.get("scale", -1)
 
 def scale_nn(s: WithScale):
-    return s.args[0].scale * s.args[1].scale
+    return s.args[0].extra_attrs.get("scale", -1) * s.args[1].extra_attrs.get("scale", -1)
 
 def scale_identity(s: WithScale):
-    return s.args[0].scale
+    return s.args[0].extra_attrs.get("scale", -1)
 
 def infer_scale(symbol: WithScale):
     def _infer(sym: Symbol):

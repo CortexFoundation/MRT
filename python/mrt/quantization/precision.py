@@ -14,14 +14,16 @@ from mrt.common.utils import \
         number_to_bits, count_to_bits, bits_to_number
 from mrt.common.types import ParametersT
 
-from .transform import Transformer
+from .transform import SymbolBridge, Transformer
 
 __ALL__ = [ "WithPrecision",
         "InferPrecision", "QuantizedInfo",
 ]
 
 @dataclass(repr=False)
-class WithPrecision(Symbol):
+#class WithPrecision(Symbol):
+class WithPrecision(SymbolBridge):
+    #class WithPrecision(Transformer):
     MAX_BIT: typing.ClassVar[int] = 32
 
     @classmethod
@@ -106,13 +108,13 @@ def prec_rules(*op_names):
         return f
     return _add_rules
 
-_infer_mul: RulesFuncT = lambda s: sum([c.precision for c in s.args[:2]])
+_infer_mul: RulesFuncT = lambda s: sum([c.extra_attrs.get("precision", -1) for c in s.args[:2]])
 """ conv2d may has 3-args, use prefix-2. """
 
-_infer_max: RulesFuncT = lambda s: max([c.precision for c in s.args])
+_infer_max: RulesFuncT = lambda s: max([c.extra_attrs.get("precision", -1) for c in s.args])
 
 def _infer_index(s: WithPrecision, index: int):
-    return s.args[index].precision
+    return s.args[index].extra_attrs.get("precision", -1)
 
 prec_rules(TUPLE)(_infer_max)
 prec_rules(MAX_AXIS)(_infer_max)
@@ -166,7 +168,7 @@ def _infer_right_shift(s: WithPrecision):
     A, B = s.args[0], s.args[1]
     assert B.is_param()
     b_prec = InferPrecision.bind(B)
-    return A.precision - b_prec
+    return A.extra_attrs.get("precision", -1) - b_prec
 
 @prec_rules(REQUANT, PCLIP, RS_PCLIP)
 def _infer_attr_prec(s: WithPrecision):
@@ -178,7 +180,7 @@ class PrecisionRevisor(WithPrecision, Transformer):
     def __call__(self, **kw):
         out = self
         if out.is_input():
-            return
+            return out.graph
         elif out.is_op(REQUANT, PCLIP):
             assert out.precision == out.parsed.precision, f"{out.name} out_prec:{out.precision}, out_parsed_prec:{out.parsed.precision}"
         elif out.is_op(RS_PCLIP):
@@ -202,12 +204,12 @@ class PrecisionRevisor(WithPrecision, Transformer):
             #     print("infered prec:", oprec)
             if out.precision_defined and oprec > out.precision:
                 out.precision, oprec = oprec, out.precision
-                out = op.pclip(out, precision=oprec).like(
-                        out, extra_attrs=out.extra_attrs)
+                out = out.from_symbol(op.pclip(out.graph, precision=oprec).like(
+                        out.graph, extra_attrs=out.extra_attrs))
             out.precision = oprec
 
         out.validate_precision()
-        return out
+        return out.graph
 
 # def cvm_infer_single_precision(
 #         symbol: WithPrecision, params: ParametersT) -> int:

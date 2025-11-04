@@ -29,32 +29,32 @@ class FuseConstant(Transformer):
         return np.abs(data).max() < self.threshold
 
     def __call__(self: Transformer, **kw):
-        if self.is_operator() and all([c.is_param() for c in self.args]):
+        if self.is_operator() and all([self.from_symbol(c).is_param() for c in self.args]):
             data = inference.run_single(
-                    self, [a.numpy() for a in self.args])
+                    self.graph, [self.from_symbol(a).numpy() for a in self.args])
             return self.as_parameter(data)
         elif self.is_op(ADD, SUB): # , BIAS_ADD):
             strips = []
             for arg in self.args:
-                if arg.is_param() and self.np_is_zero(arg.numpy()):
+                if self.from_symbol(arg).is_param() and self.np_is_zero(self.from_symbol(arg).numpy()):
                 #  if arg.is_param() and np.abs(arg.numpy()).max() == 0:
                     strips.append(arg)
             args = [a for a in self.args if a not in strips]
             if len(args) == 1:
                 return args[0]
         elif self.is_op(SLICE_LIKE):
-            if not self.args[0].is_param():
+            if not self.from_symbol(self.args[0]).is_param():
                 return
             a, b = self.args
             arg1 = np.zeros(b.shape, b.dtype)
             data = inference.run_single(
-                self, [a.numpy(), np.zeros(b.shape, b.dtype)])
+                self.graph, [self.from_symbol(a).numpy(), np.zeros(b.shape, b.dtype)])
             return self.as_parameter(data)
         elif self.is_op(REQUANT):
             if self.parsed.rescale == 1:
                 return self.args[0]
         elif self.is_op(ZEROS_LIKE, ONES_LIKE):
-            data = inference.run_single(self, [])
+            data = inference.run_single(self.graph, [])
             return self.as_parameter(data)
 
 
@@ -62,10 +62,11 @@ class FuseBatchNorm(Transformer):
     @filter_operators(BATCH_NORM)
     def __call__(self, **kw):
         X, gamma, beta, mean, var = self.args
+        X = self.from_symbol(X)
         parsed: BatchNormAttrs = self.parsed
 
-        gamma, beta = gamma.numpy(), beta.numpy()
-        mean, var = mean.numpy(), var.numpy()
+        gamma, beta = self.from_symbol(gamma).numpy(), self.from_symbol(beta).numpy()
+        mean, var = self.from_symbol(mean).numpy(), self.from_symbol(var).numpy()
         #  print(gamma.shape, beta.shape, mean.shape, var.shape)
 
         assert parsed.axis == 1
@@ -90,8 +91,8 @@ class FuseBatchNorm(Transformer):
 
             # (A * W) * gamma + bias
             # A * (W * gamma) + bias
-            W_data = W.numpy() * gamma.reshape(K, 1, 1, 1)
-            W_sym = W.from_np_data(W_data)
+            W_data = self.from_symbol(W).numpy() * gamma.reshape(K, 1, 1, 1)
+            W_sym = self.from_symbol(W).from_np_data(W_data)
             out = op.nn_conv2d(A, W_sym, **X.attrs)
         elif X.is_op(DENSE):
             A, W = X.args
@@ -99,27 +100,27 @@ class FuseBatchNorm(Transformer):
 
             # (A * W) * gamma + bias
             # A * (W * gamma) + bias
-            W_data = W.numpy() * gamma.reshape(K, 1)
-            W_sym = W.from_np_data(W_data)
+            W_data = self.from_symbol(W).numpy() * gamma.reshape(K, 1)
+            W_sym = self.from_symbol(W).from_np_data(W_data)
             out = op.nn_dense(A, W_sym, **X.attrs)
         else:
             reshp = [s if i == parsed.axis else 1 \
                     for i, s in enumerate(X.shape)]
             W = X.from_np_data(gamma.reshape(reshp))
-            out = op.mul(X, W)
+            out = op.mul(X.graph, W)
 
         bias = bias.reshape([s if i == parsed.axis else 1 \
                 for i, s in enumerate(out.shape)])
-        B = out.like(self).from_np_data(bias)
+        B = self.from_symbol(out.like(self.graph)).from_np_data(bias)
         out = op.add(out, B)
         # out = op.bias_add(out, B, axis=parsed.axis)
-        return out.like(self)
+        return out.like(self.graph)
 
 class FuseTupleGetItem(Transformer):
     @filter_operators(TUPLE_GET_ITEM)
     def __call__(self, **kw):
         X: Symbol = self.args[0]
-        if X.is_op(BATCH_NORM, DROP_OUT):
+        if self.from_symbol(X).is_op(BATCH_NORM, DROP_OUT):
             return X
         #  assert X.is_op(BATCH_NORM, DROP_OUT), X.name
         #  assert self.parsed.index == 0
@@ -133,7 +134,7 @@ class FuseAvgPool2D(Transformer):
 
     @filter_operators(AVG_POOL2D)
     def _fuse_avg_pool2d(self):
-        X: Transformer = self.args[0]
+        X: Symbol = self.args[0]
         parsed: AvgPool2DAttrs = self.parsed
         assert parsed.layout == "NCHW"
         # TODO: ignore for unstrict mode
@@ -148,15 +149,15 @@ class FuseAvgPool2D(Transformer):
             "channels": X.shape[1],
             }
         W_shape = (X.shape[1], 1, *parsed.pool_size)
-        W = X.from_np_data(np.full(
+        W = self.from_symbol(X).from_np_data(np.full(
             W_shape, 1 / product(parsed.pool_size)))
         out = op.nn_conv2d(X, W, **attrs)
-        return out.like(self)
+        return out.like(self.graph)
 
 
     @filter_operators(ADAPTIVE_AVG_POOL2D)
     def _fuse_adaptive_avg_pool2d(self):
-        X: Transformer = self.args[0]
+        X: Symbol = self.args[0]
         parsed: AdaptiveAvgPool2DAttrs = self.parsed
         assert parsed.layout == "NCHW"
         ins = X.shape[2:]
@@ -170,12 +171,12 @@ class FuseAvgPool2D(Transformer):
             scale = np.array(1 / np.prod(X.shape[-2:]))
             out = op.sum(X, axis=list(range(4))[-2:], keepdims=True)
             scale = self.from_np_data(scale.astype(X.dtype))
-            return op.mul(out, scale).like(self)
+            return op.mul(out, scale).like(self.graph)
         elif ous[0] > ins[0] or ous[1] > ins[1]:
             assert all([s == 1 for s in ins])
             out = op.repeat(X, repeats=ous[0], axis=-2)
             out = op.repeat(out, repeats=ous[1], axis=-1)
-            return out.like(self)
+            return out.like(self.graph)
 
         # calculate the attributes refers to:
         # https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work
@@ -191,23 +192,23 @@ class FuseAvgPool2D(Transformer):
             "channels": X.shape[1],
         }
         W_shape = (X.shape[1], 1, *kernel)
-        W = X.from_np_data(np.full(W_shape, 1 / product(kernel)))
+        W = self.from_symbol(X).from_np_data(np.full(W_shape, 1 / product(kernel)))
         out = op.nn_conv2d(X, W, **attrs)
-        return out.like(self)
+        return out.like(self.graph)
 
 class FuseNaiveSoftmax(Transformer):
     def __call__(self, **kw):
-        return self # not fuse pass
+        return self.graph # not fuse pass
 
         if self.is_op(SOFTMAX, LOG_SOFTMAX):
             return self.args[0]
-        assert self.is_variable() or not self.args[0].is_op(SOFTMAX, LOG_SOFTMAX)
-        return self
+        assert self.is_variable() or not self.from_symbol(self.args[0]).is_op(SOFTMAX, LOG_SOFTMAX)
+        return self.graph
 
 class FuseMean(Transformer):
     @filter_operators(MEAN)
     def __call__(self, **kw):
-        X: Transformer = self.args[0]
+        X: Symbol = self.args[0]
         #  max_axis = len(X.shape)
         #  axis = X.attrs.get("axis", None)
         #  axis = axis or [i for i in range(max_axis)]
@@ -221,7 +222,7 @@ class FuseMean(Transformer):
         scale = self.from_np_data(np.array(
             1. * product(out.shape) / product(X.shape)))
         out = op.mul(out, scale)
-        return out.like(self)
+        return out.like(self.graph)
 
 class FuseLeakyReLU(Transformer):
     @filter_operators(LEAKY_RELU)
@@ -234,22 +235,22 @@ class FuseLeakyReLU(Transformer):
                 LeakyReLU(X) = relu(X) - slope*relu(-X)
         """
         alpha = self.from_const_data(self.parsed.alpha)
-        X: Transformer = self.args[0]
+        X: Symbol = self.args[0]
         out = op.nn_relu(op.negative(X))
         out = op.mul(alpha, out)
         out = op.sub(op.nn_relu(X), out)
-        return out.like(self)
+        return out.like(self.graph)
 
 
 class FuseDivide(Transformer):
     @filter_operators(DIV)
     def __call__(self, **kw):
         """ Transform div to mul if possible. """
-        A: Transformer = self.args[0]
-        B: Transformer = self.args[1]
-        assert B.is_param(), B
-        B = B.from_np_data(1. / B.numpy())
-        return op.mul(A, B).like(self)
+        A: Symbol = self.args[0]
+        B: Symbol = self.args[1]
+        assert self.from_symbol(B).is_param(), B
+        B = self.from_symbol(B).from_np_data(1. / self.from_symbol(B).numpy())
+        return op.mul(A, B).like(self.graph)
 
 # move to fuse constant
 #  class FuseNaiveMathmatic(Transformer):

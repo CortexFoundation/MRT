@@ -65,7 +65,7 @@ class Exporter(QuantInfo):
             precision, which follows precision max bit limit.
 
         """
-        X: FixPoint = self.args[0]
+        X: FixPoint = self.from_symbol(self.args[0])
         rescale = self.parsed.rescale
 
         anno_bit = WithPrecision.MAX_BIT // 2
@@ -82,29 +82,31 @@ class Exporter(QuantInfo):
 
         if X.precision > anno_bit:
             # recalculate exp
+
             exp = exp + (X.precision - anno_bit)
 
             rs_bit = X.from_const_data(X.precision - anno_bit)
-            X = op.right_shift(X, rs_bit).like(self)
+            X_op = op.right_shift(X.graph, rs_bit).like(self.graph)
+            X =  self.from_symbol(X_op)
             X.precision = anno_bit
 
         assert frac >= 1
         assert exp <= 0
 
         frac_sym = X.from_const_data(frac)
-        out = op.mul(X, frac_sym).like(self)
+        out = op.mul(X.graph, frac_sym).like(self.graph)
 
-        exp_sym = out.from_const_data(-exp)
+        exp_sym = self.from_symbol(out).from_const_data(-exp)
         if ExporterConfig.G().use_clip:
             if ExporterConfig.G().use_pclip:
                 out = op.rs_pclip(out, exp_sym,
                         precision=self.precision)
             else:
                 pos = self.int_max()
-                out = op.right_shift(out, exp_sym).like(self)
-                out = op.clip(out, min=-pos, max=pos).like(self)
+                out = op.right_shift(out, exp_sym).like(self.graph)
+                out = op.clip(out, min=-pos, max=pos).like(self.graph)
         else:
-            out = op.right_shift(out, exp_sym).like(self)
+            out = op.right_shift(out, exp_sym).like(self.graph)
         return out
 
     def process(self):
@@ -114,7 +116,7 @@ class Exporter(QuantInfo):
         if G.use_int_dtype:
             G.use_round = True
 
-        out = self
+        out = self.graph
         if self.is_param() and G.use_round:
             data = np.round(self.numpy())
             if G.use_int_dtype:
@@ -123,7 +125,7 @@ class Exporter(QuantInfo):
 
         pos = self.int_max()
         if self.is_op(REQUANT):
-            if G.use_int_requant and (not self.args[0].is_input()):
+            if G.use_int_requant and (not self.from_symbol(self.args[0]).is_input()):
                 out = self.map_int_requant()
             else: # use float multipy to map requant
                 rescale = self.parsed.rescale
@@ -154,10 +156,10 @@ class Exporter(QuantInfo):
     def __call__(self, **kw):
         if not self.precision_defined:
             logger.warning(f"symbol: {self.name} is ignored without precision defined.")
-            return self
+            return self.graph
 
         self.validate_precision()
-        out = self.process().like(self, extra_attrs=self.extra_attrs)
+        out = self.process().like(self.graph, extra_attrs=self.extra_attrs)
         # TODO: add precision int max validate
         #  if self.is_param():
         #      absmax = np.abs(out.numpy()).max()
@@ -166,7 +168,7 @@ class Exporter(QuantInfo):
 
 @dataclass(repr=False)
 class Simulator(QuantInfo):
-    def round(self, out: Transformer):
+    def round(self, out: Symbol):
         #  data_0_5 = self.from_const_data(0.5)
         #  out = op.add(out, data_0_5)
         #  out = op.ceil(out)
@@ -176,7 +178,7 @@ class Simulator(QuantInfo):
         return out
 
     def __call__(self, with_clip=False, with_round=False, **kw):
-        out: Transformer = self
+        out: Symbol = self.graph
         if self.is_input():
             """ input is the original float data, skip. """
             return out
@@ -198,7 +200,7 @@ class Simulator(QuantInfo):
                 out = op.clip(out, min=-pos, max=pos)
                 # print(out)
                 # sys.exit()
-        return out.like(self)
+        return out.like(self.graph)
 
 
 @dataclass(repr=False)

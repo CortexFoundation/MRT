@@ -14,8 +14,69 @@ from mrt.mir.attrs import _BaseAttrs, parse_attrs
 from mrt.common.utils import N
 
 @dataclass(repr=False)
-class WithParameters(Symbol):
-    parsed: _BaseAttrs = field(repr=False)
+class SymbolBridge: # SymbolManipulator / Pass
+    graph: Symbol
+
+    def __init__(self, symbol: Symbol):
+        self.graph = symbol
+
+    @classmethod
+    def base(cls, symbol: Symbol):
+        return cls(symbol)
+
+    def __repr__(self, **attrs):
+        return self.graph.__repr__(**attrs)
+
+    def from_symbol(self, sym: Symbol) -> typing.Self:
+        return type(self)(sym)
+
+    @property
+    def parsed(self)-> _BaseAttrs:
+        return parse_attrs(self.graph.op_name, self.graph.attrs)
+        return self.graph.attrs
+
+    """Member Symbol Start
+    """
+    def is_op(self, *op_names) -> bool:
+        """ Check current symbol is in the op name list. """
+        assert len(op_names) > 0
+        return self.graph.op_name in op_names
+    def is_near(self, *names, check_args: bool = True) -> bool:
+        return self.graph.is_near(*names, check_args)
+    def to_dict(self):
+        return self.graph.to_dict()
+    @classmethod
+    def from_dict(cls, d: dict, **kwargs) -> WithParameters:
+        return cls(Symbol.from_dict(d, **kwargs), {})
+    @property
+    def args(self):
+        return self.graph.args
+    @property
+    def op_name(self):
+        return self.graph.op_name
+    @property
+    def name(self):
+        return self.graph.name
+    @property
+    def shape(self):
+        return self.graph.shape
+    @property
+    def dtype(self):
+        return self.graph.dtype
+    @property
+    def attrs(self):
+        return self.graph.attrs
+    @property
+    def extra_attrs(self):
+        return self.graph.extra_attrs
+    def set_extra_attrs(self, **kwargs):
+        return self.graph.extra_attrs.update(kwargs)
+    """Member Symbol End
+    """
+
+@dataclass(repr=False)
+class WithParameters(SymbolBridge): # SymbolManipulator / Pass
+    graph: Symbol
     params: ParametersT = field(repr=False)
     """ Parameters should not be changed in transformer,
             use copy mode instead to avoid possible errors.
@@ -23,31 +84,34 @@ class WithParameters(Symbol):
         deep copy params in trace `checkpoint_run` api.
     """
 
+    def __init__(self, symbol: Symbol, params: ParametersT):
+        self.graph = symbol
+        self.params = params
+
     @classmethod
-    def update_dict(cls, data_dict: dict, **kwargs) -> dict:
-        data_dict.update(kwargs)
-        parsed = parse_attrs(
-                data_dict["op_name"], data_dict["attrs"])
-        return super().update_dict(data_dict, parsed=parsed)
+    def base(cls, symbol: Symbol, params: ParametersT):
+        return cls(symbol, params)
 
     def __repr__(self, **attrs):
         if self.is_param():
             attrs["absmax"] = np.abs(self.numpy()).max(initial=0)
         return super().__repr__(**attrs)
 
-    def ndarray(self) -> OpOutputT:
-        return to_ndarray(self.numpy())
+    @property
+    def parsed(self)-> _BaseAttrs:
+        return parse_attrs(self.graph.op_name, self.graph.attrs)
+        attrs = self.graph.attrs
+        return attrs
+
 
     def numpy(self) -> OpNumpyT:
-        assert self.is_param(), f"{self.name} is not parameter."
-        data = self.params[self.name]
+        assert self.is_param(), f"{self.graph.name} is not parameter."
+        data = self.params[self.graph.name]
         assert isinstance(data, (tuple, list, np.ndarray)), \
-                f"param:{self.name} not OpNumpyT, get {type(data)}"
+                f"param:{self.graph.name} not OpNumpyT, get {type(data)}"
         return data
 
-        return to_numpy(self.ndarray())
-
-    def as_parameter(self, data: OpNumpyT):
+    def as_parameter(self, data: OpNumpyT) -> Symbol:
         def _f(data, dtype):
             if isinstance(data, list):
                 assert len(data) == len(dtype)
@@ -55,27 +119,44 @@ class WithParameters(Symbol):
             assert isinstance(data, np.ndarray), type(data)
             return data.astype(dtype)
 
-        self.params[self.name] = _f(data, self.dtype)
-        return op.as_variable(self)
+        self.params[self.graph.name] = _f(data, self.graph.dtype)
+        return op.as_variable(self.graph)
 
-    def from_const_data(self, data: typing.Union[int, float]) -> WithParameters:
+    def from_const_data(self, data: typing.Union[int, float]) -> Symbol:
         return self.from_np_data(data)
 
-    def from_np_data(self, data: np.ndarray, prefix="%") -> Symbol:
+    def from_symbol(self, sym: Symbol) -> typing.Type[WithParameters]: #TODO
+        return type(self)(sym, self.params)
+
+    def from_np_data(self, data: np.ndarray | typing.Union[int, float], prefix="%") -> Symbol:
+        """ out = Return Symbol
+            out = op.add(out, B)
+            self: WithParameter
+            self.graph: Symbol
+            self.from_symbol(out).from_np_data()
+
+            out = Return WithParameter
+            out.from_np_data()
+
+            op.add(out.graph, B)
+
+            graph: Symbol
+        """
         name = N.n(prefix=prefix)
         # some data is np.float/int type, use np.array to wrap it.
         data = np.array(data)
-        self.params[name] = data.astype(self.dtype)
-        return op.variable(name, data.shape, self.dtype).like(self)
+        self.params[name] = data.astype(self.graph.dtype)
+        ## return type(self). # Mark!
+        return op.variable(name, data.shape, self.graph.dtype).like(self.graph)
 
     def is_input(self) -> bool:
-        return op.is_input(self, self.params)
+        return op.is_input(self.graph, self.params)
     def is_param(self) -> bool:
-        return op.is_param(self, self.params)
+        return op.is_param(self.graph, self.params)
     def is_variable(self) -> bool:
-        return op.is_variable(self, self.params)
+        return op.is_variable(self.graph, self.params)
     def is_operator(self) -> bool:
-        return op.is_operator(self, self.params)
+        return op.is_operator(self.graph, self.params)
 
 TransformerT = typing.Callable[[Graph], Graph]
 """ Transformer Callback Function Type,
@@ -87,16 +168,9 @@ class Transformer(WithParameters):
     """ Symbol Transformer """
 
     RUN_ONCE: typing.ClassVar[bool] =False
-    """ whether to run callback once? """
 
-    # def to_dict(self, **kwargs):
-    #     """ override to dict, since transformer may want to
-    #             access the previous tfm. Thus, the next
-    #             update_dict has the `origin` key by default.
-    #     """
-    #     data = super().to_dict(**kwargs)
-    #     data["extra_attrs"]["origin"] = self
-    #     return data
+    def __init__(self, *args):
+        super().__init__(*args)
 
     @classmethod
     def get_transformer(cls, name: typing.Optional[str] = None):
@@ -106,9 +180,9 @@ class Transformer(WithParameters):
                 # use current cls to apply transform, this
                 #   may loss some information from origin
                 #   symbol, so record as `origin` in call.
-                out = cls.base(sym, params=params)
-                out = out(origin=sym, **kwargs) or out
-                assert isinstance(out, cls), (
+                out = cls.base(sym, params) # Type as Transformer
+                out = out(origin=sym, **kwargs) or sym # Type as Symbol
+                assert isinstance(out, Symbol), (
                         "transform output type should be {},"
                         " but get {}"
                         ).format(cls, type(out))
@@ -147,4 +221,7 @@ class Transformer(WithParameters):
 @dataclass(repr=False)
 class RunOnce(Transformer):
     RUN_ONCE: typing.ClassVar[bool] = True
+
+    def __init__(self, *args): # symbol: Symbol, params: ParametersT):#, parsed: _BaseAttrs=None):
+            super().__init__(*args)
 

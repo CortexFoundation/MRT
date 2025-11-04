@@ -34,16 +34,16 @@ class Spliter(RunOnce):
         refs = { self.name: 1 } # add refs for root symbol
         def _collect_refs(sym: Spliter):
             refs.setdefault(sym.name, 0)
-            if sym.is_variable():
+            if self.from_symbol(sym).is_variable():
                 return
             for a in sym.args:
                 refs.setdefault(a.name, 0)
                 refs[a.name] += 1
-        visit(self, _collect_refs)
+        visit(self.graph, _collect_refs)
 
         sym_map = {}
         sym_status = {}
-        heads = [self]
+        heads = [self.graph]
         """ status code:
             1 means current symbol has been scaned and sub childs have
                 been added into scan list.
@@ -102,7 +102,7 @@ class Spliter(RunOnce):
         def _split(sym: Spliter):
             return op.as_variable(sym) \
                     if sym.name in self.seg_names else sym
-        head = transform(self, _split)
+        head = transform(self.graph, _split)
         self.head = dump_json(head)
 
         self.head_params = {}
@@ -114,21 +114,30 @@ class Spliter(RunOnce):
 
         # helper.format_print(head, self.head_params)
 
-        return op.Tuple(*outs).like(self)
+        kwargs['pointer']["seg_names"] = self.seg_names
+        kwargs['pointer']["head"] = self.head
+        kwargs['pointer']["head_params"] = self.head_params
+
+        return op.Tuple(*outs).like(self.graph)
 
 @dataclass(repr=False)
 class Merger(WithScale, RunOnce):
-    def __call__(self, spliter: Spliter, **kw):
+    def __call__(self, spliter: Symbol, **kw):
         assert self.op_name == opns.TUPLE
-        tail_outs = dict(zip(spliter.seg_names, self.args))
+
+        head = kw['pointer']["head"]
+        head_params = kw['pointer']["head_params"]
+        seg_names = kw['pointer']["seg_names"]
+
+        tail_outs = dict(zip(seg_names, self.args))
 
         # print(spliter.seg_names)
 
-        assert spliter.head is not None
+        assert head is not None
         head_params = {k: to_ndarray(v) \
-                for k, v in spliter.head_params.items()}
+                for k, v in head_params.items()}
         # head_params.update(self.params)
-        head = load_json(spliter.head, params=head_params)
+        head = load_json(head, params=head_params)
 
         # helper.format_print(head, head_params)
 
@@ -139,6 +148,7 @@ class Merger(WithScale, RunOnce):
             return sym
         out = transform(head, _merge)
 
-        return out.like(self, params={ **head_params, **self.params })
+        self.params = { **head_params, **self.params }
+        return out.like(self.graph)
 
 

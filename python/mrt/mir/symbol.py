@@ -112,6 +112,7 @@ class _BaseSymbol:
         """ cast current symbol to child class. """
         #  assert self.shape == other.shape, "%s vs.\n %s" % (self, other)
         #  assert self.dtype == other.dtype , "%s vs.\n %s" % (self, other)
+        assert isinstance(other, Symbol)
         data = other.to_dict()
         data_new = self.to_dict()
         data.update(data_new)
@@ -342,7 +343,7 @@ def visit(symbol: Symbol, callback: _VisitorT):
         if callback.__name__ in C.log_vot_cbs:
             config.log(callback.__name__, f">> {sym}")
 
-def transform(symbol: Symbol, callback: _TransformerParamT, params:typing.Optional[ParametersT] = None) -> Symbol:
+def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
     """ Transform symbol from old to new, with inputs updated.
 
         Only the return value indicates mutation, while changing
@@ -359,7 +360,7 @@ def transform(symbol: Symbol, callback: _TransformerParamT, params:typing.Option
         if callback.__name__ in C.log_vot_cbs:
             config.log(callback.__name__, f"<< {sym}")
 
-        out = (callback(sym, params) if params else callback(sym)) or sym
+        out = callback(sym) or sym
         assert isinstance(out, Symbol), out
         # default const_ prefix symbol means parameters
         assert sym.name not in sym_map, sym.name
