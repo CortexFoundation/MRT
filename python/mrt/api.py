@@ -76,6 +76,7 @@ class Trace:
                 self._sym_inputs.append(sym)
             elif op.is_param(sym, self.params):
                 data = self.params[sym.name]
+                assert isinstance(data, np.ndarray)
                 assert sym.shape == list(data.shape), \
                    f"param:{sym.name} shape inconsistent: " + \
                    f"{sym.shape} vs. {data.shape}"
@@ -101,7 +102,7 @@ class Trace:
         return [i.shape for i in self._sym_inputs]
 
     @property
-    def input_shape_dict(self) -> typing.Dict[str, ShapeT]:
+    def input_shape_dict(self) -> typing.Dict[str, ShapeT | None]:
         return {s.name: s.shape for s in self._sym_inputs}
 
     def bind_dataset(self,
@@ -111,7 +112,7 @@ class Trace:
         # data, label = dataset.next()
         # verify and assert the input data
 
-        dataset.reset() # disable-lint
+        dataset.reset()
         self._dataset = dataset
         if stat_type is not None:
             assert issubclass(stat_type, Statistics)

@@ -305,7 +305,7 @@ def _infer_single_op(sym: Symbol, env: typing.Dict[str, F.Tensor]) -> F.Tensor:
 def type_infer(symbol: Symbol) -> Symbol:
     """Infer shape and dtype for all symbols in the graph.
     """
-    env: Dict[str, F.Tensor] = {}
+    env: typing.Dict[str, F.Tensor] = {}
 
     def _infer_type(sym: Symbol):
         if op.is_variable(sym):

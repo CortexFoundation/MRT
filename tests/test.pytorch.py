@@ -15,6 +15,14 @@ data_shape = (batch_size,) + image_shape
 # Example: use the torch vision imagenet dataset.
 import torch
 import torchvision as tv
+
+# pytorch vision default model location
+# $TORCH_HUB($TORCH_HOME/hub)/checkpoints
+# cortex models location: /data2/models/torch,
+# link above path into ~/.cache/torch manually.
+# refered as below:
+# torch.utils.model_zoo.load_url
+
 # data_transform = tv.transforms.Compose([
 #     tv.transforms.Resize(256),
 #     tv.transforms.CenterCrop(image_shape[1]),
@@ -24,7 +32,8 @@ import torchvision as tv
 # ])
 data_transform = tv.models.MobileNet_V2_Weights.IMAGENET1K_V1.transforms()
 dataset = tv.datasets.ImageFolder(
-        '~/.mxnet/datasets/imagenet/val',
+        # '~/.mxnet/datasets/imagenet/val',
+        '/data2/datasets/imagenet/val',
         transform=data_transform)
 test_loader = torch.utils.data.DataLoader(
         dataset,

@@ -11,9 +11,9 @@ class Dataset:
         """ get next data, None if end. """
         raise RuntimeError("Base Dataset Error: next")
 
-    def reset(self):
+    def reset(self): # type: ignore
         """ reset dataset internal reader status. """
-        raise RuntimeError("Base Dataset Error: reset")
+        raise RuntimeError("Base Dataset Error: reset") # type: ignore
 
     def resize(self, batch_size: int) -> Dataset:
         raise RuntimeError("Base Dataset Error: batch resize")
