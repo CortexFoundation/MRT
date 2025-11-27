@@ -7,7 +7,7 @@ from mrt.mir import op
 from mrt.mir.opns import *
 from mrt.mir.symbol import *
 
-from .transform import SymbolBridge
+from mrt.mir.symbol_pass import SymbolBridge
 
 @dataclass(repr=False)
 #class WithScale(Symbol):

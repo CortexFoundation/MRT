@@ -242,10 +242,8 @@ def pytorch_to_mrt(
             if mapper.op_name == TUPLE_GET_ITEM and args[0].op_name == BATCH_NORM:
                 out = args[0]
             else:
-                out = Symbol(*args,
-                        name=node.name, op_name=mapper.op_name,
-                        extra_attrs={ "shape": shape, "dtype": dtype },
-                        **attrs)
+                out = opclass.extern_opfunc(mapper.op_name)(*args, name=node.name,
+                        extra_attrs={"shape": shape, "dtype": dtype}, **attrs)
             env[node] = out
         else:
             raise ValueError(f"Unsupported op {node.op}")

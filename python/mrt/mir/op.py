@@ -62,7 +62,6 @@ def retrieve_operator(symbol: Symbol) -> Symbol:
 # # class Conv2D(Symbol):
 # #     strides:
 # 
-# # TODO: define op function
 # # def conv2d(X, weight, bias, strides=(1,1)...):
 # #   return Symbol(args=[X, weight, bias],
 # #           attrs={ "strides": strides })

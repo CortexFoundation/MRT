@@ -90,7 +90,7 @@ def expr2symbol(
         elif isinstance(node, relay.expr.If):
             args = [ node.cond, node.true_branch, node.false_branch ]
             args = [symbol_map[i] for i in args]
-            symbol_map[node] = opclass.extern_op_func(IF)(*args, **attrs)
+            symbol_map[node] = opclass.extern_opfunc(IF)(*args, **attrs)
         elif isinstance(node, relay.expr.Call):
             op_name = node.op.name
             if op_name in [CONCAT, ADV_INDEX]:
@@ -109,14 +109,14 @@ def expr2symbol(
                 attrs.pop("dtype")
             elif op_name == GET_VALID_COUNT:
                 attrs.pop("score_threshold")
-            symbol_map[node] = opclass.extern_op_func(op_name)(*args, **attrs)
+            symbol_map[node] = opclass.extern_opfunc(op_name)(*args, **attrs)
         elif isinstance(node, relay.TupleGetItem):
             args = [ symbol_map[node.tuple_value], ]
             attrs['index'] = node.index
-            symbol_map[node] = opclass.extern_op_func(TUPLE_GET_ITEM)(*args, **attrs)
+            symbol_map[node] = opclass.extern_opfunc(TUPLE_GET_ITEM)(*args, **attrs)
         elif isinstance(node, relay.Tuple):
             args = [ symbol_map[f] for f in node.fields ]
-            symbol_map[node] = opclass.extern_op_func(TUPLE)(*args, **attrs)
+            symbol_map[node] = opclass.extern_opfunc(TUPLE)(*args, **attrs)
         else:
             raise RuntimeError(
                 "MRT not support expr type:{}".format(type(node)))

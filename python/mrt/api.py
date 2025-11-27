@@ -26,7 +26,7 @@ from .quantization import fuse, calibrate as calib
 
 from .quantization.discrete import Discretor
 from .quantization.precision import PrecisionRevisor
-from .quantization.transform import TransformerT
+from .mir.symbol_pass import SymTransformerT
 
 @dataclass
 class TraceConfig(config._BaseConfig):
@@ -174,7 +174,7 @@ class Trace:
                 _stat_type = self._stat_type)
 
     def checkpoint_run(self,
-            *callbacks: typing.List[TransformerT],
+            *callbacks: typing.List[SymTransformerT],
             tr_name: typing.Optional[str] = None,
             **kwargs) -> Trace:
         C = TraceConfig.G()
@@ -200,7 +200,7 @@ class Trace:
         for cb in callbacks:
             # deep copy params to avoid conflict status
             params = {k: v for k, v in out.params.items()}
-            print("Apply Trace: {:25} Transformer: {}".format(
+            print("Apply Trace: {:25} SymbolTransformer: {}".format(
                 tr_name, cb.__name__))
 
             if cb.__name__ in C.log_before_tr_or_cbs:

@@ -3,10 +3,10 @@ import typing
 from dataclasses import dataclass, field
 
 from mrt.mir.symbol import *
-from mrt.mir import op, opns, helper, opclass
+from mrt.mir import op, opns, helper, optype, opclass
 
 from .scaler import WithScale
-from .transform import RunOnce
+from mrt.mir.symbol_pass import RunOnce
 
 _SCALE_CONSTANT_OPS = [
     opns.VAR,
@@ -118,7 +118,7 @@ class Spliter(RunOnce):
         kwargs['pointer']["head"] = self.head
         kwargs['pointer']["head_params"] = self.head_params
 
-        return opclass.MRT_OP_MAP[opns.TUPLE](*outs).like(self.graph)
+        return optype.infer_single(opclass.MRT_OP_MAP[opns.TUPLE](*outs)).like(self.graph)
 
 @dataclass(repr=False)
 class Merger(WithScale, RunOnce):

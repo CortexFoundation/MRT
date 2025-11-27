@@ -10,13 +10,13 @@ from mrt.mir import op, opns
 from mrt.mir.symbol import *
 from mrt.runtime import inference
 
-from .transform import Transformer
+from mrt.mir.symbol_pass import SymbolTransformer
 
 SamplingFuncT = typing.Callable[
         [typing.Union[OpNumpyT, float]], typing.Any]
 
 @dataclass(repr=False)
-class Calibrator(Transformer):
+class Calibrator(SymbolTransformer):
     @property
     def raw_data(self) -> OpOutputT | None:
         return self.extra_attrs.get("raw_data", None)
@@ -100,7 +100,7 @@ class Calibrator(Transformer):
 
 
 @dataclass(repr=False)
-class Sampling(Transformer):
+class Sampling(SymbolTransformer):
     @property
     def data(self) -> typing.Any:
         return self.extra_attrs.get("data", None)

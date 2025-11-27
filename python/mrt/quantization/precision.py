@@ -14,16 +14,14 @@ from mrt.common.utils import \
         number_to_bits, count_to_bits, bits_to_number
 from mrt.common.types import ParametersT
 
-from .transform import SymbolBridge, Transformer
+from mrt.mir.symbol_pass import SymbolBridge, SymbolTransformer
 
 __ALL__ = [ "WithPrecision",
         "InferPrecision", "QuantizedInfo",
 ]
 
 @dataclass(repr=False)
-#class WithPrecision(Symbol):
 class WithPrecision(SymbolBridge):
-    #class WithPrecision(Transformer):
     MAX_BIT: typing.ClassVar[int] = 32
 
     @classmethod
@@ -176,7 +174,7 @@ def _infer_attr_prec(s: WithPrecision):
     return s.parsed.precision
 
 @dataclass(repr=False)
-class PrecisionRevisor(WithPrecision, Transformer):
+class PrecisionRevisor(WithPrecision, SymbolTransformer):
     def __call__(self, **kw):
         out = self
         if out.is_input():

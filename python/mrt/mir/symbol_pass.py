@@ -47,7 +47,7 @@ class SymbolBridge: # SymbolManipulator / Pass
     def to_dict(self):
         return self.graph.to_dict()
     @classmethod
-    def from_dict(cls, d: dict, **kwargs) -> WithParameters:
+    def from_dict(cls, d: dict, **kwargs) -> SymbolParameters:
         return cls(Symbol.from_dict(d, **kwargs), {})
     @property
     def args(self):
@@ -76,7 +76,7 @@ class SymbolBridge: # SymbolManipulator / Pass
     """
 
 @dataclass(repr=False)
-class WithParameters(SymbolBridge): # SymbolManipulator / Pass
+class SymbolParameters(SymbolBridge):
     graph: Symbol
     params: ParametersT = field(repr=False)
     """ Parameters should not be changed in transformer,
@@ -126,17 +126,17 @@ class WithParameters(SymbolBridge): # SymbolManipulator / Pass
     def from_const_data(self, data: typing.Union[int, float]) -> Symbol:
         return self.from_np_data(data)
 
-    def from_symbol(self, sym: Symbol) -> typing.Type[WithParameters]: #TODO
+    def from_symbol(self, sym: Symbol) -> typing.Type[SymbolParameters]:
         return type(self)(sym, self.params)
 
     def from_np_data(self, data: np.ndarray | typing.Union[int, float], prefix="%") -> Symbol:
         """ out = Return Symbol
             out = op.add(out, B)
-            self: WithParameter
+            self: SymbolParameter
             self.graph: Symbol
             self.from_symbol(out).from_np_data()
 
-            out = Return WithParameter
+            out = Return Symbol
             out.from_np_data()
 
             op.add(out.graph, B)
@@ -159,14 +159,14 @@ class WithParameters(SymbolBridge): # SymbolManipulator / Pass
     def is_operator(self) -> bool:
         return op.is_operator(self.graph, self.params)
 
-TransformerT = typing.Callable[[Graph], Graph]
-""" Transformer Callback Function Type,
-        inherited from WithParameters.
+SymTransformerT = typing.Callable[[Graph], Graph]
+""" Symbol-Transformer Callback Function Type,
+        inherited from SymbolParameters.
 """
 
 @dataclass(repr=False)
-class Transformer(WithParameters):
-    """ Symbol Transformer """
+class SymbolTransformer(SymbolParameters):
+    """ Symbol Transformer(Manipulator) """
 
     RUN_ONCE: typing.ClassVar[bool] =False
 
@@ -181,7 +181,7 @@ class Transformer(WithParameters):
                 # use current cls to apply transform, this
                 #   may loss some information from origin
                 #   symbol, so record as `origin` in call.
-                out = cls.base(sym, params) # Type as Transformer
+                out = cls.base(sym, params) # Type as SymbolTransformer
                 out = out(origin=sym, **kwargs) or sym # Type as Symbol
                 assert isinstance(out, Symbol), (
                         "transform output type should be {},"
@@ -212,7 +212,7 @@ class Transformer(WithParameters):
     #     _tfm.__name__ = cls.__name__
     #     return _tfm
 
-    def __call__(self, *args, **kw) -> typing.Optional[Transformer]:
+    def __call__(self, *args, **kw) -> typing.Optional[SymbolTransformer]:
         """
             Parameters:
             origin: original symbol passed from last transformer.
@@ -220,7 +220,7 @@ class Transformer(WithParameters):
         raise NotImplementedError()
 
 @dataclass(repr=False)
-class RunOnce(Transformer):
+class RunOnce(SymbolTransformer):
     RUN_ONCE: typing.ClassVar[bool] = True
 
     def __init__(self, *args): # symbol: Symbol, params: ParametersT):#, parsed: _BaseAttrs=None):

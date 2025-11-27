@@ -11,28 +11,28 @@ from mrt.mir.attrs import *
 from mrt.runtime import inference
 from mrt.common.utils import N, product
 
-from .transform import Transformer
+from mrt.mir.symbol_pass import SymbolTransformer
 
-# TODO: add op pass register map.
 
-class FuseDropout(Transformer):
+class FuseDropout(SymbolTransformer):
     #out = filter_operators(DROP_OUT)(__call__)
     # def out():
     @filter_operators(DROP_OUT)
     def __call__(self, **kwargs):
         return self.args[0]
-class FuseIdentity(Transformer):
+
+class FuseIdentity(SymbolTransformer):
     @filter_operators(IDENTITY)
     def __call__(self, **kwargs):
         return self.args[0]
 
-class FuseConstant(Transformer):
+class FuseConstant(SymbolTransformer):
     threshold: typing.ClassVar[float] = 1e-5
 
     def np_is_zero(self, data) -> float:
         return np.abs(data).max() < self.threshold
 
-    def __call__(self: Transformer, **kw):
+    def __call__(self: SymbolTransformer, **kw):
         if self.is_operator() and all([self.from_symbol(c).is_param() for c in self.args]):
             data = inference.run_single(
                     self.graph, [self.from_symbol(a).numpy() for a in self.args])
@@ -62,7 +62,7 @@ class FuseConstant(Transformer):
             return self.as_parameter(data)
 
 
-class FuseBatchNorm(Transformer):
+class FuseBatchNorm(SymbolTransformer):
     @filter_operators(BATCH_NORM)
     def __call__(self, **kw):
         X, gamma, beta, mean, var = self.args
@@ -120,7 +120,7 @@ class FuseBatchNorm(Transformer):
         out = optype.infer_single(out)
         return out.like(self.graph)
 
-class FuseTupleGetItem(Transformer):
+class FuseTupleGetItem(SymbolTransformer):
     @filter_operators(TUPLE_GET_ITEM)
     def __call__(self, **kw):
         X: Symbol = self.args[0]
@@ -130,7 +130,7 @@ class FuseTupleGetItem(Transformer):
         #  assert self.parsed.index == 0
         #  return X
 
-class FuseAvgPool2D(Transformer):
+class FuseAvgPool2D(SymbolTransformer):
     def __call__(self, **kw):
         out = self._fuse_adaptive_avg_pool2d()
         out = out or self._fuse_avg_pool2d()
@@ -201,7 +201,7 @@ class FuseAvgPool2D(Transformer):
         out = optype.infer_single(opclass.conv2d(X, W, **attrs))
         return out.like(self.graph)
 
-class FuseNaiveSoftmax(Transformer):
+class FuseNaiveSoftmax(SymbolTransformer):
     def __call__(self, **kw):
         return self.graph # not fuse pass
 
@@ -210,7 +210,7 @@ class FuseNaiveSoftmax(Transformer):
         assert self.is_variable() or not self.from_symbol(self.args[0]).is_op(SOFTMAX, LOG_SOFTMAX)
         return self.graph
 
-class FuseMean(Transformer):
+class FuseMean(SymbolTransformer):
     @filter_operators(MEAN)
     def __call__(self, **kw):
         X: Symbol = self.args[0]
@@ -229,7 +229,7 @@ class FuseMean(Transformer):
         out = optype.infer_single(opclass.mul(out, scale))
         return out.like(self.graph)
 
-class FuseLeakyReLU(Transformer):
+class FuseLeakyReLU(SymbolTransformer):
     @filter_operators(LEAKY_RELU)
     def __call__(self, **kw):
         """ Customized rewrite pass Introduction.
@@ -248,7 +248,7 @@ class FuseLeakyReLU(Transformer):
         return out.like(self.graph)
 
 
-class FuseDivide(Transformer):
+class FuseDivide(SymbolTransformer):
     @filter_operators(DIV)
     def __call__(self, **kw):
         """ Transform div to mul if possible. """
@@ -260,7 +260,7 @@ class FuseDivide(Transformer):
         return out.like(self.graph)
 
 # move to fuse constant
-#  class FuseNaiveMathmatic(Transformer):
+#  class FuseNaiveMathmatic(SymbolTransformer):
 #      def __call__(self):
 #          if self.is_op(BIAS_ADD):
 #              X, B = self.args

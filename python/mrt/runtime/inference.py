@@ -6,11 +6,11 @@ from mrt.mir.mhsymbol import MultiHeadSymbol
 from mrt.mir.opns import *
 from mrt import frontend as ft
 
-from mrt.quantization.transform import WithParameters
+from mrt.mir.symbol_pass import SymbolParameters
 from mrt.mir import op
 
 def run_single(
-        sym: WithParameters,
+        sym: SymbolParameters,
         args_data: typing.List[OpNumpyT],
         **kwargs) -> OpNumpyT:
     assert op.is_operator(sym), sym

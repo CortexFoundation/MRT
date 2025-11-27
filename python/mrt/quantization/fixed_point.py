@@ -17,7 +17,6 @@ from mrt.quantization.discrete import QuantInfo
 from mrt.common.config import _BaseConfig
 from mrt.common.utils import number_to_bits
 
-from .transform import Transformer
 
 logger = logging.getLogger("exporter")
 
