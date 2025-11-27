@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import math
 import numpy as np
 
-from mrt.mir import op
+from mrt.mir import op, optype, opclass, opns
 from mrt.mir.opns import *
 from mrt.mir.symbol import Symbol, visit, transform
 
@@ -204,8 +204,9 @@ class PrecisionRevisor(WithPrecision, Transformer):
             #     print("infered prec:", oprec)
             if out.precision_defined and oprec > out.precision:
                 out.precision, oprec = oprec, out.precision
-                out = out.from_symbol(op.pclip(out.graph, precision=oprec).like(
-                        out.graph, extra_attrs=out.extra_attrs))
+                out = out.from_symbol(optype.infer_single(opclass.MRT_OP_MAP[opns.PCLIP](
+                    out.graph, precision=oprec)).like(
+                    out.graph, extra_attrs=out.extra_attrs))
             out.precision = oprec
 
         out.validate_precision()

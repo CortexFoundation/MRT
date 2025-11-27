@@ -2,6 +2,7 @@ import typing
 import numpy as np
 
 from mrt.mir.symbol import *
+from mrt.mir.mhsymbol import MultiHeadSymbol
 from mrt.mir.opns import *
 from mrt import frontend as ft
 

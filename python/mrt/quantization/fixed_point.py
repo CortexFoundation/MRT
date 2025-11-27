@@ -4,7 +4,9 @@ import logging
 import numpy as np
 from dataclasses import dataclass
 
-from mrt.mir import op
+from mrt.mir import op, opclass
+from mrt.mir.optype import infer_single
+from mrt.mir.opclass import MRT_OP_MAP
 from mrt.mir.opns import *
 from mrt.mir.symbol import filter_operators
 from mrt.mir.attrs import PClipAttrs, RequantAttrs
@@ -86,27 +88,26 @@ class Exporter(QuantInfo):
             exp = exp + (X.precision - anno_bit)
 
             rs_bit = X.from_const_data(X.precision - anno_bit)
-            X_op = op.right_shift(X.graph, rs_bit).like(self.graph)
-            X =  self.from_symbol(X_op)
+            X_op = infer_single(opclass.right_shift(X.graph, rs_bit)).like(self.graph)
+            X = self.from_symbol(X_op)
             X.precision = anno_bit
 
         assert frac >= 1
         assert exp <= 0
 
         frac_sym = X.from_const_data(frac)
-        out = op.mul(X.graph, frac_sym).like(self.graph)
+        out = infer_single(opclass.mul(X.graph, frac_sym)).like(self.graph)
 
         exp_sym = self.from_symbol(out).from_const_data(-exp)
         if ExporterConfig.G().use_clip:
             if ExporterConfig.G().use_pclip:
-                out = op.rs_pclip(out, exp_sym,
-                        precision=self.precision)
+                out = infer_single(MRT_OP_MAP[RS_PCLIP](out, exp_sym, precision=self.precision))
             else:
                 pos = self.int_max()
-                out = op.right_shift(out, exp_sym).like(self.graph)
-                out = op.clip(out, min=-pos, max=pos).like(self.graph)
+                out = infer_single(opclass.right_shift(out, exp_sym)).like(self.graph)
+                out = infer_single(opclass.clip(out, min=-pos, max=pos)).like(self.graph)
         else:
-            out = op.right_shift(out, exp_sym).like(self.graph)
+            out = infer_single(opclass.right_shift(out, exp_sym)).like(self.graph)
         return out
 
     def process(self):
@@ -130,26 +131,26 @@ class Exporter(QuantInfo):
             else: # use float multipy to map requant
                 rescale = self.parsed.rescale
                 rescale = self.from_const_data(rescale)
-                out = op.mul(self.args[0], rescale)
+                out = infer_single(opclass.mul(self.args[0], rescale))
                 if G.use_clip:
-                    out = op.clip(out, min=-pos, max=pos)
+                    out = infer_single(opclass.clip(out, min=-pos, max=pos))
 
             if not G.use_int_dtype and G.use_round:
                 orig_dtype = out.dtype
-                out = op.cast(out, dtype="int32")
-                out = op.cast(out, dtype=orig_dtype)
+                out = infer_single(MRT_OP_MAP[AS_TYPE](out, dtype="int32"))
+                out = infer_single(MRT_OP_MAP[AS_TYPE](out, dtype=orig_dtype))
 
         if not G.use_clip:
             if self.is_op(PCLIP):
                 out = self.args[0]
             elif self.is_op(RS_PCLIP):
-                out = op.right_shift(*self.args)
+                out = infer_single(opclass.right_shift(*self.args))
         elif not G.use_pclip:
             if self.is_op(PCLIP):
                 out = self.args[0]
             elif self.is_op(RS_PCLIP):
-                out = op.right_shift(*self.args)
-            out = op.clip(out, min=-pos, max=pos)
+                out = infer_single(opclass.right_shift(*self.args))
+            out = infer_single(opclass.clip(out, min=-pos, max=pos))
 
         return out
 
@@ -173,8 +174,8 @@ class Simulator(QuantInfo):
         #  out = op.add(out, data_0_5)
         #  out = op.ceil(out)
         orig_dtype = out.dtype
-        out = op.cast(out, dtype="int32")
-        out = op.cast(out, dtype=orig_dtype)
+        out = infer_single(MRT_OP_MAP[AS_TYPE](out, dtype="int32"))
+        out = infer_single(MRT_OP_MAP[AS_TYPE](out, dtype=orig_dtype))
         return out
 
     def __call__(self, with_clip=False, with_round=False, **kw):
@@ -191,13 +192,13 @@ class Simulator(QuantInfo):
             if self.is_op(REQUANT):
                 rescale = self.parsed.rescale
                 rescale = self.from_const_data(rescale)
-                out = op.mul(out, rescale)
+                out = infer_single(opclass.mul(out, rescale))
                 if with_round:
                     out = self.round(out)
             if with_clip:
                 pos = self.int_max()
                 # relax api from a_min/a_max to min/max
-                out = op.clip(out, min=-pos, max=pos)
+                out = infer_single(opclass.clip(out, min=-pos, max=pos))
                 # print(out)
                 # sys.exit()
         return out.like(self.graph)
@@ -215,18 +216,17 @@ class FixPoint(QuantInfo):
         anno_bit = WithPrecision.MAX_BIT // 2
         if X.precision > anno_bit:
             rs_bit = X.from_const_data(X.precision - anno_bit)
-            X = op.right_shift(X, rs_bit).like(self)
+            X = infer_single(opclass.right_shift(X, rs_bit).like(self))
             X.precision = anno_bit
 
         frac, exp = cvm_float(self.parsed.rescale, anno_bit)
         assert frac >= 1
         assert exp <= 0
         frac_sym = X.from_const_data(frac)
-        out = op.mul(X, frac_sym).like(self)
+        out = infer_single(opclass.mul(X, frac_sym)).like(self)
 
         exp_sym = out.from_const_data(-exp)
-        out = op.rs_pclip(out, exp_sym,
-                precision=self.precision)
+        out = infer_single(MRT_OP_MAP[RS_PCLIP](out, exp_sym, precision=self.precision))
         # pos = self.int_max()
         # out = op.right_shift(out, exp_sym).like(self)
         # out = op.clip(out, a_min=-pos, a_max=pos).like(self)
@@ -237,7 +237,7 @@ class FixPoint(QuantInfo):
         X: FixPoint = self.args[0]
         pos = self.int_max()
         out = X
-        out = op.pclip(X, precision=self.precision).like(self)
+        out = infer_single(MRT_OP_MAP[PCLIP](X, precision=self.precision)).like(self)
         #  out = op.clip(X, a_min=-pos, a_max=pos).like(self)
         return out
 

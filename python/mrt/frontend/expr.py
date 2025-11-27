@@ -14,6 +14,7 @@ from ..opns import *
 from ..symbol import *
 from ..types import *
 from .. import op
+from .. import opclass
 
 __ALL__ = [ "expr2symbol", "symbol2expr", "tvm_type_infer" ]
 
@@ -62,7 +63,7 @@ def expr2symbol(
         if isinstance(node, relay.expr.Constant):
             name = N.n("const_")
             params[name] = node.data
-            symbol_map[node] = op.variable(name,
+            symbol_map[node] = opclass.var(name,
                     node.data.shape, node.data.dtype)
             return
 
@@ -85,11 +86,11 @@ def expr2symbol(
 
         if isinstance(node, relay.expr.Var):
             name = node.name_hint or N.n(prefix="input_")
-            symbol_map[node] = op.variable(name, shape, dtype)
+            symbol_map[node] = opclass.var(name, shape, dtype)
         elif isinstance(node, relay.expr.If):
             args = [ node.cond, node.true_branch, node.false_branch ]
             args = [symbol_map[i] for i in args]
-            symbol_map[node] = op._new_op(IF, *args, **attrs)
+            symbol_map[node] = opclass.extern_op_func(IF)(*args, **attrs)
         elif isinstance(node, relay.expr.Call):
             op_name = node.op.name
             if op_name in [CONCAT, ADV_INDEX]:
@@ -108,15 +109,14 @@ def expr2symbol(
                 attrs.pop("dtype")
             elif op_name == GET_VALID_COUNT:
                 attrs.pop("score_threshold")
-            symbol_map[node] = op._new_op(op_name, *args, **attrs)
+            symbol_map[node] = opclass.extern_op_func(op_name)(*args, **attrs)
         elif isinstance(node, relay.TupleGetItem):
             args = [ symbol_map[node.tuple_value], ]
             attrs['index'] = node.index
-            symbol_map[node] = op._new_op(
-                    TUPLE_GET_ITEM, *args, **attrs)
+            symbol_map[node] = opclass.extern_op_func(TUPLE_GET_ITEM)(*args, **attrs)
         elif isinstance(node, relay.Tuple):
             args = [ symbol_map[f] for f in node.fields ]
-            symbol_map[node] = op._new_op(TUPLE, *args, **attrs)
+            symbol_map[node] = opclass.extern_op_func(TUPLE)(*args, **attrs)
         else:
             raise RuntimeError(
                 "MRT not support expr type:{}".format(type(node)))

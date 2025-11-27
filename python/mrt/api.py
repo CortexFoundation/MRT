@@ -12,7 +12,7 @@ from .common import config
 from .runtime.analysis import *
 
 from .mir import op, helper
-#  from .mir.model import MultiHeadSymbol
+from .mir.mhsymbol import MultiHeadSymbol
 from .mir.symbol import *
 
 from .dataset.base import Dataset
@@ -253,6 +253,7 @@ class Trace:
                 fuse.FuseDropout.get_transformer(),
                 fuse.FuseMean.get_transformer(),
                 fuse.FuseNaiveSoftmax.get_transformer(),
+                fuse.FuseIdentity.get_transformer(),
                 fuse.FuseConstant.get_transformer(),
                 **kwargs,
                 )
@@ -260,23 +261,18 @@ class Trace:
     def calibrate(self, repeats: int = 1, **kwargs) -> Trace:
         assert self._dataset is not None
         tr_name = kwargs.pop("tr_name", "calibrate")
-        raw_data: typing.Dict[str, OpOutputT] = {}
-        out_data: typing.List[OpNumpyT] = []
 
         out = self
         for i in range(repeats):
-            kwargs["raw_data"] = raw_data
-            kwargs["out_data"] = out_data
             data, _ = self._dataset.next()
             out = out.checkpoint_run(
                     calib.Calibrator.get_transformer(),
                     data = data,
-                    #  tr_name = tr_name,
                     tr_name = f"{tr_name}_run_{i}",
                     **kwargs)
         out = out.checkpoint_run(
                 calib.SymmetricMinMaxSampling.get_transformer(),
-                tr_name = "%s_sampling" % tr_name, **{'origin_data': raw_data})
+                tr_name = "%s_sampling" % tr_name)
         return out
 
     def quantize(self, **kwargs):

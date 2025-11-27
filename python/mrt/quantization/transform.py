@@ -7,8 +7,9 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from mrt.mir.symbol import *
+from mrt.mir.mhsymbol import Graph
 
-from mrt.mir import op, opns
+from mrt.mir import op, opns, opclass
 from mrt.mir.attrs import _BaseAttrs, parse_attrs
 
 from mrt.common.utils import N
@@ -147,7 +148,7 @@ class WithParameters(SymbolBridge): # SymbolManipulator / Pass
         data = np.array(data)
         self.params[name] = data.astype(self.graph.dtype)
         ## return type(self). # Mark!
-        return op.variable(name, data.shape, self.graph.dtype).like(self.graph)
+        return opclass.var(name, data.shape, self.graph.dtype).like(self.graph)
 
     def is_input(self) -> bool:
         return op.is_input(self.graph, self.params)

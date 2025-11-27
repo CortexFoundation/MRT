@@ -80,7 +80,7 @@ LOG = "log"
 SQRT = "sqrt"
 POW = "pow"
 
-PASS = "pass"
+IDENTITY = "identity" # original PASS
 # ======= auto generate op =========
 ARANGE = "arange"
 ZEROS_LIKE = "zeros_like"

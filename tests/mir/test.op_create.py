@@ -52,6 +52,11 @@ def test_create_conv2d_op():
     assert conv2d_a.attrs != None
     assert conv2d_a.strides != None
 
+    args = [X, W]
+    attrs = {'strides':(3,3)}
+    conv2d_f = opclass.conv2d(*args, **attrs)
+    assert isinstance(conv2d_f, opclass.Conv2D), 'conv2d_f isnot a Conv2D'
+
     print(f'Got {conv2d_a.name} strides: {conv2d_a.strides}')
     print(f'Got {conv2d_a.name} padding: {conv2d_a.padding}')
     print(f'Show {conv2d_a.name} {conv2d_a}')
@@ -75,6 +80,7 @@ def test_create_conv2d_op():
     # test: Symbol Compatible Mode
     args = [X1, W]
     attrs = {'strides':(3,3)}
+
 
     # Symbol Compatible Init
     conv2d_d = opclass.Conv2D(*args, name='conv2d_d', **attrs)

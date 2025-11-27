@@ -3,7 +3,7 @@ import typing
 from dataclasses import dataclass, field
 
 from mrt.mir.symbol import *
-from mrt.mir import op, opns, helper
+from mrt.mir import op, opns, helper, opclass
 
 from .scaler import WithScale
 from .transform import RunOnce
@@ -118,7 +118,7 @@ class Spliter(RunOnce):
         kwargs['pointer']["head"] = self.head
         kwargs['pointer']["head_params"] = self.head_params
 
-        return op.Tuple(*outs).like(self.graph)
+        return opclass.MRT_OP_MAP[opns.TUPLE](*outs).like(self.graph)
 
 @dataclass(repr=False)
 class Merger(WithScale, RunOnce):

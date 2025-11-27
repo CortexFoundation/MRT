@@ -3,7 +3,7 @@ from collections import namedtuple
 
 import numpy as np
 
-from mrt.mir import op
+from mrt.mir import opclass, optype
 from mrt.mir.opns import *
 from mrt.mir.symbol import *
 from mrt.mir.attrs import *
@@ -19,6 +19,10 @@ class FuseDropout(Transformer):
     #out = filter_operators(DROP_OUT)(__call__)
     # def out():
     @filter_operators(DROP_OUT)
+    def __call__(self, **kwargs):
+        return self.args[0]
+class FuseIdentity(Transformer):
+    @filter_operators(IDENTITY)
     def __call__(self, **kwargs):
         return self.args[0]
 
@@ -93,7 +97,7 @@ class FuseBatchNorm(Transformer):
             # A * (W * gamma) + bias
             W_data = self.from_symbol(W).numpy() * gamma.reshape(K, 1, 1, 1)
             W_sym = self.from_symbol(W).from_np_data(W_data)
-            out = op.nn_conv2d(A, W_sym, **X.attrs)
+            out = optype.infer_single(opclass.conv2d(A, W_sym, **X.attrs))
         elif X.is_op(DENSE):
             A, W = X.args
             dense_parsed: DenseAttrs = X.parsed
@@ -102,18 +106,18 @@ class FuseBatchNorm(Transformer):
             # A * (W * gamma) + bias
             W_data = self.from_symbol(W).numpy() * gamma.reshape(K, 1)
             W_sym = self.from_symbol(W).from_np_data(W_data)
-            out = op.nn_dense(A, W_sym, **X.attrs)
+            out = optype.infer_single(opclass.dense(A, W_sym, **X.attrs))
         else:
             reshp = [s if i == parsed.axis else 1 \
                     for i, s in enumerate(X.shape)]
             W = X.from_np_data(gamma.reshape(reshp))
-            out = op.mul(X.graph, W)
+            out = optype.infer_single(opclass.mul(X.graph, W))
 
         bias = bias.reshape([s if i == parsed.axis else 1 \
                 for i, s in enumerate(out.shape)])
         B = self.from_symbol(out.like(self.graph)).from_np_data(bias)
-        out = op.add(out, B)
-        # out = op.bias_add(out, B, axis=parsed.axis)
+        out = opclass.add(out, B)
+        out = optype.infer_single(out)
         return out.like(self.graph)
 
 class FuseTupleGetItem(Transformer):
@@ -151,7 +155,7 @@ class FuseAvgPool2D(Transformer):
         W_shape = (X.shape[1], 1, *parsed.pool_size)
         W = self.from_symbol(X).from_np_data(np.full(
             W_shape, 1 / product(parsed.pool_size)))
-        out = op.nn_conv2d(X, W, **attrs)
+        out = optype.infer_single(opclass.conv2d(X, W, **attrs))
         return out.like(self.graph)
 
 
@@ -169,13 +173,14 @@ class FuseAvgPool2D(Transformer):
         assert len(X.shape) == 4
         if all([s == 1 for s in parsed.output_size]):
             scale = np.array(1 / np.prod(X.shape[-2:]))
-            out = op.sum(X, axis=list(range(4))[-2:], keepdims=True)
+            out = optype.infer_single(opclass.sum(X, dim=list(range(4))[-2:], keepdim=True))
             scale = self.from_np_data(scale.astype(X.dtype))
-            return op.mul(out, scale).like(self.graph)
+            out = optype.infer_single(opclass.mul(out, scale))
+            return out.like(self.graph)
         elif ous[0] > ins[0] or ous[1] > ins[1]:
             assert all([s == 1 for s in ins])
-            out = op.repeat(X, repeats=ous[0], axis=-2)
-            out = op.repeat(out, repeats=ous[1], axis=-1)
+            out = optype.infer_single(opclass.repeat(X, repeats=ous[0], axis=-2))
+            out = optype.infer_single(opclass.repeat(out, repeats=ous[1], axis=-1))
             return out.like(self.graph)
 
         # calculate the attributes refers to:
@@ -193,7 +198,7 @@ class FuseAvgPool2D(Transformer):
         }
         W_shape = (X.shape[1], 1, *kernel)
         W = self.from_symbol(X).from_np_data(np.full(W_shape, 1 / product(kernel)))
-        out = op.nn_conv2d(X, W, **attrs)
+        out = optype.infer_single(opclass.conv2d(X, W, **attrs))
         return out.like(self.graph)
 
 class FuseNaiveSoftmax(Transformer):
@@ -218,10 +223,10 @@ class FuseMean(Transformer):
         #      axis = [a for a in range(max_axis) if a not in axis]
         #  axis_len = product([X.shape[a] for a in axis])
 
-        out = op.sum(X, **self.attrs)
+        out = optype.infer_single(opclass.sum(X, **self.attrs))
         scale = self.from_np_data(np.array(
             1. * product(out.shape) / product(X.shape)))
-        out = op.mul(out, scale)
+        out = optype.infer_single(opclass.mul(out, scale))
         return out.like(self.graph)
 
 class FuseLeakyReLU(Transformer):
@@ -236,9 +241,10 @@ class FuseLeakyReLU(Transformer):
         """
         alpha = self.from_const_data(self.parsed.alpha)
         X: Symbol = self.args[0]
-        out = op.nn_relu(op.negative(X))
-        out = op.mul(alpha, out)
-        out = op.sub(op.nn_relu(X), out)
+        out = optype.infer_single(opclass.negative(X))
+        out = optype.infer_single(opclass.relu(out))
+        out = optype.infer_single(opclass.mul(alpha, out))
+        out = optype.infer_single(opclass.sub(optype.infer_single(opclass.relu(X)), out))
         return out.like(self.graph)
 
 
@@ -250,7 +256,8 @@ class FuseDivide(Transformer):
         B: Symbol = self.args[1]
         assert self.from_symbol(B).is_param(), B
         B = self.from_symbol(B).from_np_data(1. / self.from_symbol(B).numpy())
-        return op.mul(A, B).like(self.graph)
+        out = optype.infer_single(opclass.mul(A, B))
+        return out.like(self.graph)
 
 # move to fuse constant
 #  class FuseNaiveMathmatic(Transformer):

@@ -40,8 +40,9 @@ print("test data: ", data.shape, data.flatten()[:10], label)
 
 # model inference context, like cpu, gpu, etc.
 config = {
-        "device": "cuda:0",
-        "target": "" }
+        #"device": "cuda:0",
+        "device": "cpu",
+        "target": ""}
 
 # TODO: load the model from torchvision
 model_name = "resnet18"                 # passed
@@ -95,7 +96,7 @@ with TraceConfig(
         calibrate_repeats=16,
         force_run_from_trcb="Discretor",
         log_after_all=True,
-        #  log_before_tr_or_cbs=[ "calibrate_run_0", ],
+        log_before_tr_or_cbs=[ "PrecisionRevisor", ],
         ):
     dis_tr = tr.discrete()
 
