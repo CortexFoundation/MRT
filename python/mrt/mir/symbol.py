@@ -11,14 +11,15 @@ from mrt.common.types import *
 
 # from . import config
 # from .utils import *
-#  from .types import *
-from .opns import *
+from . import opns
 
 __ALL__ = [
         "Symbol",
         "visit", "transform",
         "filter_operators",
         ]
+
+SelfSymbol = typing.TypeVar("SelfSymbol", bound="Symbol")
 
 def _format_printer(data):
     if isinstance(data, dict):
@@ -112,7 +113,10 @@ class _BaseSymbol:
         #  assert self.shape == other.shape, "%s vs.\n %s" % (self, other)
         #  assert self.dtype == other.dtype , "%s vs.\n %s" % (self, other)
         data = other.to_dict()
-        data.update(self.to_dict())
+        data_new = self.to_dict()
+        data.update(data_new)
+
+        data["extra_attrs"] = other.extra_attrs if self.extra_attrs == {} else data["extra_attrs"]
         # copy extra attrs by default.
         #  data["extra_attrs"] = other.extra_attrs
         return type(other).from_dict(data, **kwargs)
@@ -277,34 +281,6 @@ class Symbol(_BaseSymbol):
     def hash(self) -> int:
         return hash(str(self))
 
-# class Convolution2D(Symbol):
-#     strides: typing.Tuple[int, int]
-
-# class Dropout(Symbol):
-#     eps: float = 1e-5
-
-# class Pass:
-#     symbol: Symbol
-
-#     def visit(self, op: Symbol):
-#         env: typing.Dict[Symbol, Symbol] = {}
-#         for sym in sym2list(self.symbol):
-#             out = getattr(self, f"visit_{op.op_name}")(op) or op
-#             assert isinstance(sym, Symbol)
-#             env[sym] = out
-#         return env[op]
-
-# def _default_visit_op(op):
-#     return op
-
-# for op in op_list:
-#     setattr(Pass, f"visit_{op.op_name}", _default_visit_op)
-
-# class FuseDropoutPass(Pass):
-#     def visit_dropout(self, op: Dropout):
-#         op.eps
-#         return op.args[0]
-
 def _topo_sort(symbol: Symbol, sym_list: typing.List[Symbol]):
     assert isinstance(symbol, Symbol), \
             f"({type(symbol).__name__}){str(symbol)}"
@@ -349,6 +325,7 @@ def load_json(data: _SymbolJsonT, **extra_attrs) -> Symbol:
 
 _VisitorT = typing.Callable[[Symbol], None]
 _TransformerT = typing.Callable[[Symbol], typing.Optional[Symbol]]
+_TransformerParamT = typing.Callable[[Symbol, typing.Optional[ParametersT]], Symbol]
 """ Symbol Transformer
 
     Return new symbol to transform old symbol into updated one,
@@ -365,7 +342,7 @@ def visit(symbol: Symbol, callback: _VisitorT):
         if callback.__name__ in C.log_vot_cbs:
             config.log(callback.__name__, f">> {sym}")
 
-def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
+def transform(symbol: Symbol, callback: _TransformerParamT, params:typing.Optional[ParametersT] = None) -> Symbol:
     """ Transform symbol from old to new, with inputs updated.
 
         Only the return value indicates mutation, while changing
@@ -382,7 +359,7 @@ def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
         if callback.__name__ in C.log_vot_cbs:
             config.log(callback.__name__, f"<< {sym}")
 
-        out = callback(sym) or sym
+        out = (callback(sym, params) if params else callback(sym)) or sym
         assert isinstance(out, Symbol), out
         # default const_ prefix symbol means parameters
         assert sym.name not in sym_map, sym.name
@@ -491,7 +468,7 @@ class MultiHeadSymbol(dict):
 
     @classmethod
     def from_tuple(cls, tuple_names, symbol):
-        assert symbol.is_op(TUPLE), symbol
+        assert symbol.is_op(opns.TUPLE), symbol
         mhs = cls(zip(tuple_names, symbol.args))
         mhs.origin = symbol
         return mhs

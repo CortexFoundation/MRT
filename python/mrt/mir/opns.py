@@ -99,3 +99,6 @@ RS_PCLIP = "mrt.rs_pclip"
 LUT = "mrt.lut"
 """ look up table, equals adv_index in tvm """
 
+
+def Opname2Funcname(op_name: str) -> str:
+    return op_name.replace('.', '_')
