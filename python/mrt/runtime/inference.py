@@ -2,24 +2,25 @@ import typing
 import numpy as np
 
 from mrt.mir.symbol import *
+from mrt.mir.mhsymbol import MultiHeadSymbol
 from mrt.mir.opns import *
 from mrt import frontend as ft
 
-from mrt.quantization.transform import WithParameters
+from mrt.mir.symbol_pass import SymbolParameters
 from mrt.mir import op
 
 def run_single(
-        sym: WithParameters,
+        sym: SymbolParameters,
         args_data: typing.List[OpNumpyT],
         **kwargs) -> OpNumpyT:
     assert op.is_operator(sym), sym
     sym = op.retrieve_operator(sym)
 
     if sym.is_op(TUPLE_GET_ITEM):
-        return args_data[0][sym.parsed.index]
+        return args_data[0][sym.attrs['index']]
     elif sym.is_op(REQUANT):
         # it's type is np.float32/64, use np.array to wrap.
-        return np.array(sym.parsed.rescale * args_data[0])
+        return np.array(sym.attrs['rescale'] * args_data[0])
     elif sym.is_op(ARANGE):
         args = [a.numpy().item() for a in args_data]
         return np.arange(*args, **sym.attrs)

@@ -32,7 +32,8 @@ def variable(name, shape, dtype) -> Symbol:
 
 def as_variable(symbol: Symbol, shape=None, dtype=None) -> Symbol:
     """ inherit extra attrs """
-    out = symbol.copy(op_name=VAR, args=[], attrs={})
+    # out = symbol.copy(op_name=VAR, args=[], attrs={})
+    out = symbol.as_variable()
     out.shape = shape or out.shape
     out.dtype = dtype or out.dtype
     return out
@@ -40,69 +41,68 @@ def as_variable(symbol: Symbol, shape=None, dtype=None) -> Symbol:
 def retrieve_operator(symbol: Symbol) -> Symbol:
     return symbol.copy(args=[as_variable(c) for c in symbol.args])
 
-def _new_op(op_name, *args, extra_attrs=None, **attrs) -> Symbol:
-    name = attrs.pop("name", N.n())
-    return Symbol.from_dict({},
-            name=name, op_name=op_name,
-            args=args or [], attrs=attrs or {},
-            extra_attrs=extra_attrs or {})
-
-def _register_op(op_name):
-    def _op(*args, **attrs) -> Symbol:
-        op = _new_op(op_name, *args, **attrs)
-        from . import optype
-        out = optype.infer_single(op)
-        return out
-    return _op
-
-Tuple = _register_op(TUPLE)
-TupleGetItem = _register_op(TUPLE_GET_ITEM)
-
-# class Conv2D(Symbol):
-#     strides:
-
-# TODO: define op function
-# def conv2d(X, weight, bias, strides=(1,1)...):
-#   return Symbol(args=[X, weight, bias],
-#           attrs={ "strides": strides })
-nn_conv2d = _register_op(CONV2D)
-nn_dense = _register_op(DENSE)
-nn_batch_norm = _register_op(BATCH_NORM)
-#  bias_add = _register_op(BIAS_ADD)
-
-nn_relu = _register_op(RELU)
-
-sum = _register_op(SUM)
-#  mean = _register_op(MEAN)
-clip = _register_op(CLIP)
-ceil = _register_op(CEIL)
-right_shift = _register_op(RIGHT_SHIFT)
-# relax api from cast to astype
-#  astype = _register_op(AS_TYPE)
-cast = _register_op(AS_TYPE)
-#  flatten = _register_op(FLATTEN)
-adv_index = _register_op(ADV_INDEX)
-zeros_like = _register_op(ZEROS_LIKE)
-
-repeat = _register_op(REPEAT)
-reshape = _register_op(RESHAPE)
-
-add = _register_op(ADD)
-sub = _register_op(SUB)
-max_axis = _register_op(MAX_AXIS)
-mul = _register_op(MUL)
-div = _register_op(DIV)
-matmul = _register_op(MATMUL)
-exp = _register_op(EXP)
-negative = _register_op(NEGATIVE)
-
-sigmoid = _register_op(SIGMOID)
-softmax = _register_op(SOFTMAX)
-
-requant = _register_op(REQUANT)
-pclip = _register_op(PCLIP)
-rs_pclip = _register_op(RS_PCLIP)
-lut = _register_op(LUT)
+# def _new_op(*args, op_name='', extra_attrs=None, **attrs) -> Symbol:
+#     name = attrs.pop("name", N.n())
+#     return Symbol(*args,
+#             name=name, op_name=op_name,
+#             extra_attrs=extra_attrs or {},
+#             **attrs)
+# 
+# def _register_op(op_name):
+#     def _op(*args, **attrs) -> Symbol:
+#         op = _new_op(*args, op_name=op_name, **attrs)
+#         from . import optype
+#         out = optype.infer_single(op)
+#         return out
+#     return _op
+# 
+# Tuple = _register_op(TUPLE)
+# TupleGetItem = _register_op(TUPLE_GET_ITEM)
+# 
+# # class Conv2D(Symbol):
+# #     strides:
+# 
+# # def conv2d(X, weight, bias, strides=(1,1)...):
+# #   return Symbol(args=[X, weight, bias],
+# #           attrs={ "strides": strides })
+# nn_conv2d = _register_op(CONV2D)
+# nn_dense = _register_op(DENSE)
+# nn_batch_norm = _register_op(BATCH_NORM)
+# #  bias_add = _register_op(BIAS_ADD)
+# 
+# nn_relu = _register_op(RELU)
+# 
+# sum = _register_op(SUM)
+# #  mean = _register_op(MEAN)
+# clip = _register_op(CLIP)
+# ceil = _register_op(CEIL)
+# right_shift = _register_op(RIGHT_SHIFT)
+# # relax api from cast to astype
+# #  astype = _register_op(AS_TYPE)
+# cast = _register_op(AS_TYPE)
+# #  flatten = _register_op(FLATTEN)
+# adv_index = _register_op(ADV_INDEX)
+# zeros_like = _register_op(ZEROS_LIKE)
+# 
+# repeat = _register_op(REPEAT)
+# reshape = _register_op(RESHAPE)
+# 
+# add = _register_op(ADD)
+# sub = _register_op(SUB)
+# max_axis = _register_op(MAX_AXIS)
+# mul = _register_op(MUL)
+# div = _register_op(DIV)
+# matmul = _register_op(MATMUL)
+# exp = _register_op(EXP)
+# negative = _register_op(NEGATIVE)
+# 
+# sigmoid = _register_op(SIGMOID)
+# softmax = _register_op(SOFTMAX)
+# 
+# requant = _register_op(REQUANT)
+# pclip = _register_op(PCLIP)
+# rs_pclip = _register_op(RS_PCLIP)
+# lut = _register_op(LUT)
 
 def is_operator(symbol: Symbol, params: ParametersT = {}):
     return symbol.op_name != VAR

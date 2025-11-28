@@ -9,8 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import sys
 
-from mrt.mir.symbol import Symbol, MultiHeadSymbol, sym2list, transform
-from mrt.mir import op
+from mrt.mir.symbol import Symbol, sym2list, transform
+from mrt.mir.mhsymbol import MultiHeadSymbol
+from mrt.mir import op, opclass
 from mrt.mir.opns import *
 from mrt.common.types import ParametersT
 from mrt.common.utils import N
@@ -46,7 +47,7 @@ TORCH_MRT_OP_MAP = {
 
         "adaptive_avg_pool2d.default": _T(ADAPTIVE_AVG_POOL2D, 1, [ Attr("output_size", (1,1)) ]),
         "max_pool2d.default": _T(MAX_POOL2D, 1, [
-            Attr("kernel_size", (1,1)), Attr("strides", (1,1)), Attr("padding", (0,0)) ]),
+            Attr("kernel_size", (1,1)), Attr("strides", (1,1)), Attr("padding", (0,0)), Attr("dilation", (1,1)), Attr("ceil_mode", False) ]),
         "mean.dim": _T(MEAN, 1, [ Attr("dim", None), Attr("keepdim", False) ]),
 
         "add.Tensor": _T(ADD, 2), "add_.Tensor": _T(ADD, 2),
@@ -60,7 +61,7 @@ TORCH_MRT_OP_MAP = {
         "cat.default": _T(CONCAT, 1, [ Attr("dim", 0) ]),
         "view.default": _T(RESHAPE, 1, [ Attr("shape", ()) ]),
         "transpose.int": _T(TRANSPOSE, 1, [ Attr("dim0", 0), Attr("dim1", 0) ]),
-        "contiguous.default": _T(PASS, 1),
+        "contiguous.default": _T(IDENTITY, 1),
 
         "chunk.default": _T(SPLIT, 1, [ Attr("chunks", 1), Attr("dim", 0) ]),
         "getitem": _T(TUPLE_GET_ITEM, 1, [ Attr("index", 0) ]),
@@ -100,7 +101,7 @@ MRT_TORCH_OP_MAP = FunctionMapper({
             ),
         RESHAPE: torch.reshape,
         TRANSPOSE: torch.transpose,
-        PASS: lambda x: x,
+        IDENTITY: lambda x: x,
         SPLIT: torch.chunk,
 
         ADD: torch.add,
@@ -156,7 +157,7 @@ def create_parameters(ep: torch.export.ExportedProgram):
         dshape = data_to_mrt(torch_shape)
         dtype = data_to_mrt(torch_dtype)
 
-        out = op.variable(name_hint, dshape, dtype)
+        out = opclass.var(name=name_hint, shape=dshape, dtype=dtype)
         params[name_hint] = to_bind_parameters[spec.target].detach().numpy().astype(dtype)
         assert dshape == list(params[name_hint].shape)
         #  print(">> vars: ", out)
@@ -207,7 +208,7 @@ def pytorch_to_mrt(
                 continue
 
             if node.name not in param_vars: # input
-                env[node] = op.variable(node.name, shape, dtype)
+                env[node] = opclass.var(name=node.name, shape=shape, dtype=dtype)
             else:
                 env[node] = param_vars[node.name]
         elif node.op == "output": # [[ out1, out2, out3 ]]
@@ -234,13 +235,15 @@ def pytorch_to_mrt(
             if mapper.op_name == CONCAT:
                 args = args[0]
 
+            if mapper.op_name == SPLIT:
+                shape = data_to_mrt([ t.shape for t in node.meta['val']])
+                dtype = data_to_mrt([ t.dtype for t in node.meta['val']])
+
             if mapper.op_name == TUPLE_GET_ITEM and args[0].op_name == BATCH_NORM:
                 out = args[0]
             else:
-                out = op._new_op(
-                        mapper.op_name, *args,
-                        name=node.name, extra_attrs={ "shape": shape, "dtype": dtype },
-                        **attrs)
+                out = opclass.extern_opfunc(mapper.op_name)(*args, name=node.name,
+                        extra_attrs={"shape": shape, "dtype": dtype}, **attrs)
             env[node] = out
         else:
             raise ValueError(f"Unsupported op {node.op}")

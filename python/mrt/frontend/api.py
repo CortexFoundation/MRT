@@ -4,6 +4,7 @@ import sys
 from functools import wraps
 
 from mrt.mir.symbol import *
+from mrt.mir.mhsymbol import MultiHeadSymbol, Graph
 from mrt.common.types import *
 from mrt.common.config import MRTConfig
 

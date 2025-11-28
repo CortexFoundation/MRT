@@ -6,6 +6,7 @@ from .converter import *
 from .types import *
 
 from mrt.mir.symbol import *
+from mrt.mir.mhsymbol import MultiHeadSymbol
 from mrt.common.types import *
 
 Executor = namedtuple("Executor", ["vm", "device"])
