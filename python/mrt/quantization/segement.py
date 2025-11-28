@@ -114,20 +114,21 @@ class Spliter(RunOnce):
 
         # helper.format_print(head, self.head_params)
 
-        kwargs['pointer']["seg_names"] = self.seg_names
-        kwargs['pointer']["head"] = self.head
-        kwargs['pointer']["head_params"] = self.head_params
-
-        return optype.infer_single(opclass.MRT_OP_MAP[opns.TUPLE](*outs)).like(self.graph)
+        # export to symbol_op Spliter_%N
+        out = optype.infer_single(opclass.MRT_OP_MAP[opns.TUPLE](*outs)).like(self.graph)
+        out.set_extra_attrs(seg_names=self.seg_names)
+        out.set_extra_attrs(head=self.head)
+        out.set_extra_attrs(head_params=self.head_params)
+        return out
 
 @dataclass(repr=False)
 class Merger(WithScale, RunOnce):
-    def __call__(self, spliter: Symbol, **kw):
+    def __call__(self, spliter: Symbol, **kwargs):
         assert self.op_name == opns.TUPLE
 
-        head = kw['pointer']["head"]
-        head_params = kw['pointer']["head_params"]
-        seg_names = kw['pointer']["seg_names"]
+        head = kwargs['ptr']["head"]
+        head_params = kwargs['ptr']["head_params"]
+        seg_names = kwargs['ptr']["seg_names"]
 
         tail_outs = dict(zip(seg_names, self.args))
 

@@ -227,8 +227,10 @@ class Trace:
         """Must pass params inside a dict,
         Cause it will be unfolded separately
         """
-        kwargs_seg = {"pointer": {"head": {}, "head_params": {}, "seg_names": []}}
-        seg_tr = fuse_tr.checkpoint_run(seg.Spliter.get_transformer(), **kwargs_seg)
+        seg_tr = fuse_tr.checkpoint_run(seg.Spliter.get_transformer())
+        kwargs_seg = {"ptr": {"head": seg_tr.symbol.extra_attrs.get("head"),
+                              "head_params": seg_tr.symbol.extra_attrs.get("head_params"),
+                              "seg_names": seg_tr.symbol.extra_attrs.get("seg_names")}}
 
         C = TraceConfig.G()
         calib_tr = seg_tr.calibrate(
