@@ -4,23 +4,35 @@ import typing
 import numpy as np
 
 
-from dataclasses import dataclass, field, InitVar
+from dataclasses import field, InitVar
 
 from mrt.mir import op, opns
 from mrt.mir.symbol import *
 from mrt.runtime import inference
 
-from .transform import Transformer
+from mrt.mir.symbol_pass import SymbolTransformer
 
 SamplingFuncT = typing.Callable[
         [typing.Union[OpNumpyT, float]], typing.Any]
 
-@dataclass(repr=False)
-class Calibrator(Transformer):
-    """ skip dump, and restore from np_data. """
-    raw_data: OpOutputT | None = field(repr=False, default=None)
-    """ calibrate may be processed multi-times """
-    data: typing.List[OpNumpyT] = field(default_factory=list)
+class Calibrator(SymbolTransformer):
+    @property
+    def raw_data(self) -> OpOutputT | None:
+        return self.extra_attrs.get("raw_data", None)
+    @raw_data.setter
+    def raw_data(self, val):
+        self.set_extra_attrs(raw_data=val)
+
+    @property
+    def data(self) -> typing.List[OpNumpyT]:
+        return self.extra_attrs.get("data", [])
+    @data.setter
+    def data(self, val):
+        self.set_extra_attrs(data=val)
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     def _rand_data(self,
             enabled: bool = False,
@@ -51,10 +63,10 @@ class Calibrator(Transformer):
         elif self.is_param():
             out = self.params[self.name]
         else:
-            single_op = op.retrieve_operator(self)
+            single_op = op.retrieve_operator(self.graph)
             out = inference.run_single(
                     single_op,
-                    [a.raw_data for a in self.args],
+                    [self.from_symbol(a).raw_data for a in self.args],
                     **kwargs)
 
         assert isinstance(out, (np.ndarray, list)), type(out)
@@ -90,8 +102,7 @@ class Calibrator(Transformer):
         assert val == expect, "{} vs. {}".format(val, expect)
 
 
-@dataclass(repr=False)
-class Sampling(Transformer):
+class Sampling(SymbolTransformer):
     @property
     def data(self) -> typing.Any:
         return self.extra_attrs.get("data", None)
@@ -99,23 +110,30 @@ class Sampling(Transformer):
     def data(self, val):
         self.set_extra_attrs(data=val)
 
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     @classmethod
     def sampling(cls, np_data: np.ndarray) -> typing.Any:
         raise NotImplementedError()
 
-    def __call__(self, origin: Calibrator, **kw):
+    def __call__(self, origin: Symbol, **kw):
         print(type(origin), origin)
         if self.is_op(opns.CLIP):
             # TODO: remove clip if threshold is less than a_max
             a_min, a_max = self.parsed.a_min, self.parsed.a_max
             self.data = max(abs(a_min), abs(a_max))
         else:
-            self.data = self.sampling(origin.data)
-        return self
+            self.data = self.sampling(origin.extra_attrs.get("raw_data"))
+        return self.graph
 
-@dataclass(repr=False)
 class SymmetricMinMaxSampling(Sampling):
     threshold: typing.ClassVar[float] = 1e-5
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     @classmethod
     def sampling(cls, data: typing.List[OpNumpyT]) -> float:

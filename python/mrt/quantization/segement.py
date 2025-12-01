@@ -3,10 +3,10 @@ import typing
 from dataclasses import dataclass, field
 
 from mrt.mir.symbol import *
-from mrt.mir import op, opns, helper
+from mrt.mir import op, opns, helper, optype, opclass
 
 from .scaler import WithScale
-from .transform import RunOnce
+from mrt.mir.symbol_pass import RunOnce
 
 _SCALE_CONSTANT_OPS = [
     opns.VAR,
@@ -23,27 +23,30 @@ _SCALE_CONSTANT_OPS = [
     opns.CLIP, opns.AS_TYPE,
         ]
 
-@dataclass(repr=False)
 class Spliter(RunOnce):
     head: typing.Optional[dict] = None
     head_params: typing.Optional[typing.Dict[str, OpNumpyT]] = None
     seg_names: typing.List[str] = field(default_factory=list)
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     def __call__(self, **kwargs):
         """ Auto split the model. """
         refs = { self.name: 1 } # add refs for root symbol
         def _collect_refs(sym: Spliter):
             refs.setdefault(sym.name, 0)
-            if sym.is_variable():
+            if self.from_symbol(sym).is_variable():
                 return
             for a in sym.args:
                 refs.setdefault(a.name, 0)
                 refs[a.name] += 1
-        visit(self, _collect_refs)
+        visit(self.graph, _collect_refs)
 
         sym_map = {}
         sym_status = {}
-        heads = [self]
+        heads = [self.graph]
         """ status code:
             1 means current symbol has been scaned and sub childs have
                 been added into scan list.
@@ -102,7 +105,7 @@ class Spliter(RunOnce):
         def _split(sym: Spliter):
             return op.as_variable(sym) \
                     if sym.name in self.seg_names else sym
-        head = transform(self, _split)
+        head = transform(self.graph, _split)
         self.head = dump_json(head)
 
         self.head_params = {}
@@ -114,21 +117,34 @@ class Spliter(RunOnce):
 
         # helper.format_print(head, self.head_params)
 
-        return op.Tuple(*outs).like(self)
+        # export to symbol_op Spliter_%N
+        out = optype.infer_single(opclass.MRT_OP_MAP[opns.TUPLE](*outs)).like(self.graph)
+        out.set_extra_attrs(seg_names=self.seg_names)
+        out.set_extra_attrs(head=self.head)
+        out.set_extra_attrs(head_params=self.head_params)
+        return out
 
-@dataclass(repr=False)
 class Merger(WithScale, RunOnce):
-    def __call__(self, spliter: Spliter, **kw):
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
+    def __call__(self, spliter: Symbol, **kwargs):
         assert self.op_name == opns.TUPLE
-        tail_outs = dict(zip(spliter.seg_names, self.args))
+
+        head = kwargs['ptr']["head"]
+        head_params = kwargs['ptr']["head_params"]
+        seg_names = kwargs['ptr']["seg_names"]
+
+        tail_outs = dict(zip(seg_names, self.args))
 
         # print(spliter.seg_names)
 
-        assert spliter.head is not None
+        assert head is not None
         head_params = {k: to_ndarray(v) \
-                for k, v in spliter.head_params.items()}
+                for k, v in head_params.items()}
         # head_params.update(self.params)
-        head = load_json(spliter.head, params=head_params)
+        head = load_json(head, params=head_params)
 
         # helper.format_print(head, head_params)
 
@@ -139,6 +155,7 @@ class Merger(WithScale, RunOnce):
             return sym
         out = transform(head, _merge)
 
-        return out.like(self, params={ **head_params, **self.params })
+        self.params = { **head_params, **self.params }
+        return out.like(self.graph)
 
 

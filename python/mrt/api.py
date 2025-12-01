@@ -12,7 +12,7 @@ from .common import config
 from .runtime.analysis import *
 
 from .mir import op, helper
-#  from .mir.model import MultiHeadSymbol
+from .mir.mhsymbol import MultiHeadSymbol
 from .mir.symbol import *
 
 from .dataset.base import Dataset
@@ -26,7 +26,7 @@ from .quantization import fuse, calibrate as calib
 
 from .quantization.discrete import Discretor
 from .quantization.precision import PrecisionRevisor
-from .quantization.transform import TransformerT
+from .mir.symbol_pass import SymTransformerT
 
 @dataclass
 class TraceConfig(config._BaseConfig):
@@ -175,7 +175,7 @@ class Trace:
                 _stat_type = self._stat_type)
 
     def checkpoint_run(self,
-            *callbacks: typing.List[TransformerT],
+            *callbacks: typing.List[SymTransformerT],
             tr_name: typing.Optional[str] = None,
             **kwargs) -> Trace:
         C = TraceConfig.G()
@@ -201,7 +201,7 @@ class Trace:
         for cb in callbacks:
             # deep copy params to avoid conflict status
             params = {k: v for k, v in out.params.items()}
-            print("Apply Trace: {:25} Transformer: {}".format(
+            print("Apply Trace: {:25} SymbolTransformer: {}".format(
                 tr_name, cb.__name__))
 
             if cb.__name__ in C.log_before_tr_or_cbs:
@@ -224,7 +224,14 @@ class Trace:
 
     def discrete(self) -> Trace:
         fuse_tr = self.fuse()
+
+        """Must pass params inside a dict,
+        Cause it will be unfolded separately
+        """
         seg_tr = fuse_tr.checkpoint_run(seg.Spliter.get_transformer())
+        kwargs_seg = {"ptr": {"head": seg_tr.symbol.extra_attrs.get("head"),
+                              "head_params": seg_tr.symbol.extra_attrs.get("head_params"),
+                              "seg_names": seg_tr.symbol.extra_attrs.get("seg_names")}}
 
         C = TraceConfig.G()
         calib_tr = seg_tr.calibrate(
@@ -233,7 +240,8 @@ class Trace:
         quant_tr = calib_tr.quantize()
         quant_tr = quant_tr.checkpoint_run(
                 seg.Merger.get_transformer(),
-                spliter=seg_tr.symbol)
+                spliter=seg_tr.symbol,
+                **kwargs_seg)
         return quant_tr
 
     def fuse(self, **kwargs) -> Trace:
@@ -248,6 +256,7 @@ class Trace:
                 fuse.FuseDropout.get_transformer(),
                 fuse.FuseMean.get_transformer(),
                 fuse.FuseNaiveSoftmax.get_transformer(),
+                fuse.FuseIdentity.get_transformer(),
                 fuse.FuseConstant.get_transformer(),
                 **kwargs,
                 )
@@ -255,13 +264,13 @@ class Trace:
     def calibrate(self, repeats: int = 1, **kwargs) -> Trace:
         assert self._dataset is not None
         tr_name = kwargs.pop("tr_name", "calibrate")
+
         out = self
         for i in range(repeats):
             data, _ = self._dataset.next()
             out = out.checkpoint_run(
                     calib.Calibrator.get_transformer(),
                     data = data,
-                    #  tr_name = tr_name,
                     tr_name = f"{tr_name}_run_{i}",
                     **kwargs)
         out = out.checkpoint_run(

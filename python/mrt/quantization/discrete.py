@@ -4,7 +4,10 @@ import typing
 import math
 from dataclasses import dataclass, field
 
-from mrt.mir import op
+from mrt.mir import op, opclass
+from mrt.mir.optype import infer_single
+from mrt.mir.opclass import MRT_OP_MAP
+
 from mrt.mir.opns import *
 from mrt.mir.symbol import *
 
@@ -14,7 +17,6 @@ from mrt.common.utils import *
 
 from .scaler import *
 from .calibrate import Sampling
-from .transform import Transformer
 from .precision import WithPrecision
 
 __ALL__ = [
@@ -33,9 +35,16 @@ class DiscreteInfo:
         return self.scale is None and self.precision is None
 
 
-@dataclass(repr=False)
 class QuantInfo(WithScale, WithPrecision, Sampling):
-    requant_ops: typing.Dict[DiscreteInfo, Symbol] = field(repr=False)
+    requant_ops: typing.Dict[DiscreteInfo, Symbol] = {} #field(default_factory=dict)
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        self.requant_ops = {}
+        super().__init__(*args)
+
+    def from_symbol(self, sym: Symbol) -> typing.Self:
+        return type(self)(sym, self.params)
 
     @classmethod
     def default_dict(cls, **kwargs) -> dict:
@@ -62,7 +71,7 @@ class QuantInfo(WithScale, WithPrecision, Sampling):
         """
         scale, precision = info.scale, info.precision
         if info.undefined:
-            return self
+            return self.graph
         elif scale is not None:
             precision = self.scale_to_precision(scale)
         elif precision is not None:
@@ -71,12 +80,11 @@ class QuantInfo(WithScale, WithPrecision, Sampling):
         if info not in self.requant_ops:
             curr_scale = self.scale if self.scale_defined else 1
             #TODO: add pass to check rescale=1 and duplicate requant
-            out = op.requant(
-                    self,
+            out = infer_single(MRT_OP_MAP[REQUANT](
+                    self.graph,
                     rescale=scale/curr_scale,
-                    precision=precision,
-                    )
-            out = out.like(self)
+                    precision=precision)
+                    ).like(self.graph)
             out.set_extra_attrs(
                 data=self.data, scale=scale, precision=precision)
             self.requant_ops[info] = out
@@ -137,12 +145,13 @@ register_rules_with_default(
 register_rules_with_default(SUM, requant_rule=args_max_prec(10))
 
 def uniform_args_scale(args: typing.List[QuantInfo],
+                       params: ParametersT = {},
                        std_prec: int =15):
     # standard max precision for add/sub children.
 
     assert len(args) > 0
     #  raw_print(s)
-    assert any([c.is_operator() for c in args]), \
+    assert any([op.is_operator(c.graph, params) for c in args]), \
             "Need fuse constant for uniform_args_scale"
     scales = []
     for arg in args:
@@ -173,27 +182,28 @@ def uniform_args_scale(args: typing.List[QuantInfo],
 #      scale = min(scaleA, scaleB)
 #      return [DiscreteInfo(scale=scale) for c in s.args]
 def scale_like_index(s: WithScale, index: int = 0):
-    return s.args[index].scale
+    return s.args[index].extra_attrs.get("scale", -1)
+
 
 register_rules_with_default(
         ADD, SUB,
         # BIAS_ADD,
         MAXIMUM, MINIMUM,
-        requant_rule=lambda s: uniform_args_scale(s.args),
+        requant_rule=lambda s: uniform_args_scale([s.from_symbol(a) for a in s.args], s.params),
         scale_rule=scale_like_index)
 
 def scale_concat(s: WithScale):
-    fscale = s.args[0].scale
-    if all([a.scale == fscale for a in s.args]):
+    fscale = s.args[0].extra_attrs.get("scale", -1)
+    if all([a.extra_attrs.get("scale", -1) == fscale for a in s.args]):
         return fscale
-    return [a.scale for a in s.args]
+    return [a.extra_attrs.get("scale", -1) for a in s.args]
 register_rules_with_default(
         CONCAT, TUPLE,
-        requant_rule=lambda s: uniform_args_scale(s.args),
+        requant_rule=lambda s: uniform_args_scale([s.from_symbol(a) for a in s.args], s.params),
         scale_rule=scale_concat)
 
 def uniform_first_scale(s: QuantInfo):
-    target_scale = s.args[0].scale
+    target_scale = s.args[0].extra_attrs.get("scale", -1)
     return [DiscreteInfo(scale=target_scale) for c in s.args]
 
 register_rules_with_default(
@@ -202,7 +212,7 @@ register_rules_with_default(
 
 # register_rules_with_default(
 #         WHERE,
-#         requant_rule=lambda s: uniform_args_scale(s.args[1:]),
+#         requant_rule=lambda s: uniform_args_scale([s.from_symbol(a) for a in s.args[1:]], s.params),
 #         scale_rule=scale_like_index(s, -1),
 #         )
 
@@ -217,7 +227,7 @@ register_rules_with_default(SLICE_LIKE, STRIDED_SLICE)
 register_rules_with_default(NEGATIVE)
 
 def scale_tuple_get_item(s: WithScale):
-    ascale = s.args[0].scale
+    ascale = s.args[0].extra_attrs.get("scale", -1)
     if isinstance(ascale, (list, tuple)):
         return ascale[s.parsed.index]
     return ascale
@@ -226,7 +236,7 @@ register_rules_with_default(
         scale_rule=scale_tuple_get_item)
 
 def op_clip_rules(s: QuantInfo):
-    scale = s.args[0].scale
+    scale = s.args[0].extra_attrs.get("scale", -1)
     s.set_extra_attrs(
             a_min=s.parsed.a_min * scale,
             a_max=s.parsed.a_max * scale)
@@ -249,21 +259,21 @@ def op_lut_rules(s: QuantInfo):
 
     X = s.args[0]
     offset = s.from_np_data(np.array(alpha, "int"))
-    indices = op.add(X, offset).like(X)
-    indices = op.clip(indices, a_min=0,  a_max=2*alpha).like(X) #a_max=alpha+1)
-    indices = op.cast(indices, dtype="int32")
+    indices = infer_single(opclass.add(X, offset)).like(X)
+    indices = infer_single(opclass.clip(indices, a_min=0, a_max=2*alpha)).like(X) #a_max=alpha+1)
+    indices = infer_single(MRT_OP_MAP[AS_TYPE](indices, dtype="int32"))
 
     # arg_min, arg_max = -s.data, s.data
     # if s.is_op(EXP):
     #     arg_max = min(math.log(s.data), arg_max)
 
-    op_inp = np.arange(-alpha, alpha+1) / s.args[0].scale
+    op_inp = np.arange(-alpha, alpha+1) / s.args[0].extra_attrs.get("scale", -1)
     table = inference.run(s, [ tvm.nd.array(op_inp), ])
     table = np.clip(table.numpy(), a_min=-s.data, a_max=s.data)
     # table = np.reshape(table, (-1, 1))
     oscale = s.precision_to_scale(LUT_OUT_PREC)
     weight = s.from_np_data(table * oscale)
-    out = op.adv_index(weight, indices).like(s)
+    out = infer_single(MRT_OP_MAP[ADV_INDEX](weight, indices)).like(s)
     # out.scale = s.precision_to_scale(LUT_INP_PREC)
     return out
 
@@ -280,22 +290,22 @@ def softmax_scale_rules(s: QuantInfo):
 def op_softmax_rules(s: QuantInfo):
     lambd = 10
     X = s.args[0] # get requant rule op
-    Xp = X.attrs["precision"]
-    Xs = X.scale  #X.attrs["precision"]
+    Xp = X.extra_attrs["precision"]
+    Xs = X.extra_attrs["scale"]  #X.attrs["precision"]
     axis = s.attrs["axis"]
     alpha = int(lambd * Xs)
     var = s.from_np_data(np.array(alpha, "int"))
 
-    max_axis = op.max_axis(X, axis = axis, keepdims=True)
-    offset = op.sub(max_axis, var)
-    offset = op.pclip(offset, precision=Xp)
+    max_axis = infer_single(opclass.max_axis(X, dim=axis, keepdim=True))
+    offset = infer_single(opclass.sub(max_axis, var))
+    offset = infer_single(MRT_OP_MAP[PCLIP](offset, precision=Xp))
     offset.set_extra_attrs(precision=Xp)
-    norm = op.sub(X, offset)
-    norm = op.nn_relu(norm)
-    norm = op.pclip(norm, precision=Xp)
+    norm = infer_single(opclass.sub(X, offset))
+    norm = infer_single(opclass.relu(norm))
+    norm = infer_single(MRT_OP_MAP[PCLIP](norm, precision=Xp))
     norm.set_extra_attrs(precision=Xp)
     # TODO: norm = op.cast(norm, dtype="int32")
-    norm = op.cast(norm, dtype="int32")
+    norm = infer_single(MRT_OP_MAP[AS_TYPE](norm, dtype="int32"))
 
     op_inp = np.arange(0, alpha+1) / Xs
     table = np.exp(op_inp)
@@ -304,21 +314,21 @@ def op_softmax_rules(s: QuantInfo):
     weight = np.round(table)
     # weight = np.transpose(weight, (1, 0))
     weight = s.from_np_data(weight)
-    out_lut = op.adv_index(weight, norm).like(s)
-    sum_lut = op.sum(out_lut, axis=axis, keepdims=True).like(out_lut)
+    out_lut = infer_single(MRT_OP_MAP[ADV_INDEX](weight, norm)).like(s)
+    sum_lut = infer_single(opclass.sum(out_lut, dim=axis, keepdim=True)).like(out_lut)
 
     oprec = min(SOFTMAX_PREC, 31 - tprec)
     oscale = bits_to_number(oprec)
     nd_oscale = s.from_np_data(np.array(oscale, "int"))
-    prob = op.mul(out_lut, nd_oscale)
+    prob = infer_single(opclass.mul(out_lut, nd_oscale))
 
-    half_lut = op.rs_pclip(sum_lut, s.from_const_data(1), precision=31)
+    half_lut = infer_single(MRT_OP_MAP[RS_PCLIP](sum_lut, s.from_const_data(1), precision=31))
     half_lut.set_extra_attrs(precision=31)
-    prob = op.add(prob, half_lut)
-    out = op.div(prob, sum_lut)
-    out = op.cast(out, dtype="int32")
-    out = op.cast(out, dtype="float32")
-    out = op.pclip(out, precision=oprec)
+    prob = infer_single(opclass.add(prob, half_lut))
+    out = infer_single(opclass.div(prob, sum_lut))
+    out = infer_single(MRT_OP_MAP[AS_TYPE](out, dtype="int32"))
+    out = infer_single(MRT_OP_MAP[AS_TYPE](out, dtype="float32"))
+    out = infer_single(MRT_OP_MAP[PCLIP](out, precision=oprec))
     out.set_extra_attrs(scale=oscale, precision=oprec)
 
     return out
@@ -330,7 +340,6 @@ register_rules_with_default(
         scale_rule=softmax_scale_rules
 )
 
-@dataclass(repr=False)
 class Discretor(QuantInfo):
     """
         does operation -> out
@@ -357,11 +366,15 @@ class Discretor(QuantInfo):
         output precision <- precision(target)
         output scale <- scale
     """
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def __call__(self, **kw):
         if self.is_variable():
-            return
+            return self.graph
         elif self.is_op(TUPLE):
-            return
+            return self.graph
 
         orig_names = [a.name for a in self.args]
 
@@ -378,14 +391,14 @@ class Discretor(QuantInfo):
         # requant input to specific precision
         arg_dts = _DISCRETE_REQUANT_RULES[self.op_name](self)
         for i, arg in enumerate(self.args):
-            self.args[i] = arg.rescale(arg_dts[i])
+            self.args[i] = self.from_symbol(arg).rescale(arg_dts[i])
 
         # calculate the F function
-        out = _DISCRETE_OP_RULES[self.op_name](self).like(
-                self, extra_attrs=self.extra_attrs)
+        out = _DISCRETE_OP_RULES[self.op_name](self.graph).like(
+                self.graph, extra_attrs=self.extra_attrs)
 
         # calculate the output data's scale
-        out.scale = INFER_SCALE_RULES[self.op_name](out)
+        out.set_extra_attrs(scale = INFER_SCALE_RULES[self.op_name](out))
         new = op.subgraph(out, inames=[a.name for a in self.args])
         #  self.is_op(EXP) and raw_print(new)
         #  out.scale = infer_scale(new)
@@ -397,7 +410,8 @@ class Discretor(QuantInfo):
         #     out = op.pclip(out, precision=target_precision).like(
         #             out, extra_attrs=out.extra_attrs)
         #     out.precision = target_precision
-        out.precision = self.scale_to_precision(out.scale)
+        out.set_extra_attrs(precision = self.scale_to_precision(out.extra_attrs.get("scale", -1)))
+
 
         # TODO: add skip for some operators
         # same_scale = all([a.scale == out.scale for a in self.args])

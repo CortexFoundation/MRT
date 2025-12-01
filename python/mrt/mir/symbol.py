@@ -11,14 +11,15 @@ from mrt.common.types import *
 
 # from . import config
 # from .utils import *
-#  from .types import *
-from .opns import *
+from . import opns
 
 __ALL__ = [
         "Symbol",
         "visit", "transform",
         "filter_operators",
         ]
+
+SelfSymbol = typing.TypeVar("SelfSymbol", bound="Symbol")
 
 def _format_printer(data):
     if isinstance(data, dict):
@@ -111,8 +112,12 @@ class _BaseSymbol:
         """ cast current symbol to child class. """
         #  assert self.shape == other.shape, "%s vs.\n %s" % (self, other)
         #  assert self.dtype == other.dtype , "%s vs.\n %s" % (self, other)
+        assert isinstance(other, Symbol)
         data = other.to_dict()
-        data.update(self.to_dict())
+        data_new = self.to_dict()
+        data.update(data_new)
+
+        data["extra_attrs"] = other.extra_attrs if self.extra_attrs == {} else data["extra_attrs"]
         # copy extra attrs by default.
         #  data["extra_attrs"] = other.extra_attrs
         return type(other).from_dict(data, **kwargs)
@@ -187,7 +192,6 @@ class _BaseSymbol:
                 _format_printer(oattrs))
 
 
-@dataclass
 class Symbol(_BaseSymbol):
     """ Uniform Symbol Representation for RelayExpr
 
@@ -204,6 +208,15 @@ class Symbol(_BaseSymbol):
         for the user's config about quantization layers.
     """
 
+    def __init__(self, *args, name:str=None, op_name:str=None, extra_attrs:dict=None, **attrs):
+        assert name != None
+        assert op_name != None
+        self.name = name
+        self.op_name = op_name
+        self.args = [arg for arg in args]
+        self.attrs = attrs
+        self.extra_attrs = extra_attrs or {}
+
     # Overridable Methods, inheritted from _BaseSymbol
     #   to support multi-inherit design.
     @classmethod
@@ -215,12 +228,43 @@ class Symbol(_BaseSymbol):
     def base(cls, symbol: Symbol, **kwargs) -> Symbol:
         return super().base(symbol, **kwargs)
     def like(self, other: Symbol, **kwargs) -> Symbol:
-        return super().like(other, **kwargs)
+        """ cast current symbol to child class. """
+        assert isinstance(other, Symbol)
+        data = other.to_dict()
+        data_new = self.to_dict()
+        data.update(data_new)
+        data["extra_attrs"] = other.extra_attrs if self.extra_attrs == {} else data["extra_attrs"]
+        # copy extra attrs by default.
+        # data["extra_attrs"] = other.extra_attrs
+        #return type(other).from_dict(data, **kwargs)
+        return Symbol.from_dict(data, **kwargs)
+    def as_variable(self, **kwargs) -> Symbol:
+        sym = Symbol.from_dict(self.to_dict(), **kwargs) # kwargs override self
+        sym.op_name = opns.VAR
+        sym.args = []
+        sym.attrs = {}
+        return sym
     def copy(self, **kwargs) -> Symbol:
         return super().copy(**kwargs)
     @classmethod
     def from_dict(cls, d: dict, **kwargs):
-        return super().from_dict(d, **kwargs)
+        data = cls.default_dict()
+        data.update(d)
+        data.update(kwargs)
+        data = cls.update_dict(data)
+        fnames = [f.name for f in fields(cls)]
+        data = {k: data[k] for k in data if k in fnames}
+        args = data['args'] or []
+        attrs = data['attrs'] or {}
+        try:
+            out = cls(*args, name=data['name'], op_name=data['op_name'], extra_attrs=data['extra_attrs'], **attrs)
+        except Exception as _:
+            raise RuntimeError((
+                "Error for type:{} create from dict, "
+                "expected: {}, but get {}"
+                ).format(get_class_name(cls),
+                    fnames, data.keys()))
+        return out
     @classmethod
     def default_dict(cls, **kwargs) -> dict:
         kwargs.setdefault("args", [])
@@ -277,34 +321,6 @@ class Symbol(_BaseSymbol):
     def hash(self) -> int:
         return hash(str(self))
 
-# class Convolution2D(Symbol):
-#     strides: typing.Tuple[int, int]
-
-# class Dropout(Symbol):
-#     eps: float = 1e-5
-
-# class Pass:
-#     symbol: Symbol
-
-#     def visit(self, op: Symbol):
-#         env: typing.Dict[Symbol, Symbol] = {}
-#         for sym in sym2list(self.symbol):
-#             out = getattr(self, f"visit_{op.op_name}")(op) or op
-#             assert isinstance(sym, Symbol)
-#             env[sym] = out
-#         return env[op]
-
-# def _default_visit_op(op):
-#     return op
-
-# for op in op_list:
-#     setattr(Pass, f"visit_{op.op_name}", _default_visit_op)
-
-# class FuseDropoutPass(Pass):
-#     def visit_dropout(self, op: Dropout):
-#         op.eps
-#         return op.args[0]
-
 def _topo_sort(symbol: Symbol, sym_list: typing.List[Symbol]):
     assert isinstance(symbol, Symbol), \
             f"({type(symbol).__name__}){str(symbol)}"
@@ -349,6 +365,7 @@ def load_json(data: _SymbolJsonT, **extra_attrs) -> Symbol:
 
 _VisitorT = typing.Callable[[Symbol], None]
 _TransformerT = typing.Callable[[Symbol], typing.Optional[Symbol]]
+_TransformerParamT = typing.Callable[[Symbol, typing.Optional[ParametersT]], Symbol]
 """ Symbol Transformer
 
     Return new symbol to transform old symbol into updated one,
@@ -371,6 +388,7 @@ def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
         Only the return value indicates mutation, while changing
         attributes in parameter passed in args does nothing.
     """
+    assert isinstance(symbol.args, list), f"Symbol_Args_Wrong_type: {type(symbol.args)}"
     sym_map: typing.Dict = {}
     C = config.LogConfig.G()
     for sym in sym2list(symbol):
@@ -382,7 +400,11 @@ def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
         if callback.__name__ in C.log_vot_cbs:
             config.log(callback.__name__, f"<< {sym}")
 
-        out = callback(sym) or sym
+        # Skipping transform output symbol in trace-Exporter
+        if callback.__name__.find("Exporter")>=0 and sym.name == symbol.name:
+            out = sym
+        else:
+            out = callback(sym) or sym
         assert isinstance(out, Symbol), out
         # default const_ prefix symbol means parameters
         assert sym.name not in sym_map, sym.name
@@ -474,27 +496,6 @@ def transform(symbol: Symbol, callback: _TransformerT) -> Symbol:
 #                      name: str = "main") -> MultiHeadSymbol:
 #          return MultiHeadSymbol(**{ name: symbol })
 
-class MultiHeadSymbol(dict):
-    """ { "main": F(X) } """
-    origin: typing.Optional[Symbol] = None
-
-    @classmethod
-    def from_symbol(cls, symbol: Symbol, name: str = "main"):
-        return MultiHeadSymbol({ name: symbol })
-
-    def as_tuple(self) -> typing.Tuple[typing.List[str], Symbol]:
-        from . import op
-        #  args = list(self.values())
-        #  sym_type = type(args[0]) if args else Symbol
-        mhs = self.origin or op.Tuple(*list(self.values()))
-        return list(self.keys()), mhs
-
-    @classmethod
-    def from_tuple(cls, tuple_names, symbol):
-        assert symbol.is_op(TUPLE), symbol
-        mhs = cls(zip(tuple_names, symbol.args))
-        mhs.origin = symbol
-        return mhs
 
 #  MultiHeadSymbol = typing.Dict[str, Symbol]
 
@@ -545,11 +546,6 @@ class MultiHeadSymbol(dict):
 #      return {k: load_json(v) for k, v in data}
 
 # ^^^^^^^^^^^^^^^ MultiHeadSymbol API ^^^^^^^^^^^^^^^^^^
-
-Graph = typing.Union[Symbol, MultiHeadSymbol]
-""" Notice that Symbol and MultiHeadSymbol can both
-        be regarded as a model Graph.
-"""
 #  def graph_visit(graph: Graph, callback: _VisitorT):
 #      return visit(graph, callback)
 #      #  visit_func = visit if isinstance(graph, Symbol) else mhs_visit
