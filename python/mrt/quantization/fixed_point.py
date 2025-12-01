@@ -52,8 +52,11 @@ CVMConfig = ExporterConfig(
         use_int_requant=True,
         use_int_dtype=True)
 
-@dataclass(repr=False)
 class Exporter(QuantInfo):
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def map_int_requant(self):
         """ requant(X, rescale) = X * rescale
 
@@ -166,8 +169,12 @@ class Exporter(QuantInfo):
         #      assert absmax - 0.01 <= out.int_max()
         return out
 
-@dataclass(repr=False)
+# TODO: deprecated?
 class Simulator(QuantInfo):
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def round(self, out: Symbol):
         #  data_0_5 = self.from_const_data(0.5)
         #  out = op.add(out, data_0_5)
@@ -203,8 +210,12 @@ class Simulator(QuantInfo):
         return out.like(self.graph)
 
 
-@dataclass(repr=False)
+# TODO: deprecated?
 class FixPoint(QuantInfo):
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def map_requant(self) -> FixPoint:
         if (self.args[0]).is_input():
             return self

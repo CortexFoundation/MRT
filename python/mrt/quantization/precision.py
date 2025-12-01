@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import typing
-from dataclasses import dataclass
 
 import math
 import numpy as np
@@ -20,9 +19,12 @@ __ALL__ = [ "WithPrecision",
         "InferPrecision", "QuantizedInfo",
 ]
 
-@dataclass(repr=False)
 class WithPrecision(SymbolBridge):
     MAX_BIT: typing.ClassVar[int] = 32
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     @classmethod
     def _validate_precision(cls, prec, msg=None):
@@ -173,8 +175,11 @@ def _infer_attr_prec(s: WithPrecision):
     assert s.parsed.precision == s.precision
     return s.parsed.precision
 
-@dataclass(repr=False)
 class PrecisionRevisor(WithPrecision, SymbolTransformer):
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def __call__(self, **kw):
         out = self
         if out.is_input():

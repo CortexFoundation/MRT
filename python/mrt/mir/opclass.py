@@ -432,8 +432,27 @@ def maximum(X, name=None, extra_attrs=None) -> symbol.Symbol:
 def minimum(X, name=None, extra_attrs=None) -> symbol.Symbol:
     return symbol.Symbol(X, name=name or N.n(), op_name=opns.MINIMUM, extra_attrs=extra_attrs or {})
 
-def repeat(X, name=None, extra_attrs=None) -> symbol.Symbol:
-    return symbol.Symbol(X, name=name or N.n(), op_name=opns.REPEAT, extra_attrs=extra_attrs or {})
+#def repeat(X, name=None, extra_attrs=None) -> symbol.Symbol:
+#    return symbol.Symbol(X, name=name or N.n(), op_name=opns.REPEAT, extra_attrs=extra_attrs or {})
+class Repeat(symbol.Symbol):
+    op_name = opns.REPEAT
+
+    @property
+    def repeats(self) -> typing.Optional[int]:
+        return self.attrs['repeats']
+
+    @property
+    def axis(self) -> typing.Optional[int]:
+        return self.attrs['axis']
+
+    def __init__(self, X, name=None, repeats=None, axis=None, extra_attrs=None):
+        super().__init__(X, name=name or N.n(), op_name=opns.REPEAT, extra_attrs=extra_attrs or {}, **{'repeats': repeats, 'axis': axis})
+
+    @classmethod
+    def from_dict(cls, d: dict, **kwargs):
+        return _from_dict_attrs(cls, d, ['repeats', 'axis'], **kwargs)
+def repeat(*args, **kwargs):
+    return Repeat(*args, **kwargs)
 
 class Squeeze(symbol.Symbol):
     op_name = opns.SQUEEZE

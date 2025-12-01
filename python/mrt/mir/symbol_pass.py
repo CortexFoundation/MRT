@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing
 from functools import wraps
-from dataclasses import dataclass, field
+from dataclasses import field
 
 import numpy as np
 
@@ -14,7 +14,7 @@ from mrt.mir.attrs import _BaseAttrs, parse_attrs
 
 from mrt.common.utils import N
 
-@dataclass(repr=False)
+
 class SymbolBridge: # SymbolManipulator / Pass
     graph: Symbol
 
@@ -44,38 +44,37 @@ class SymbolBridge: # SymbolManipulator / Pass
         return self.graph.op_name in op_names
     def is_near(self, *names, check_args: bool = True) -> bool:
         return self.graph.is_near(*names, check_args)
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return self.graph.to_dict()
     @classmethod
     def from_dict(cls, d: dict, **kwargs) -> SymbolParameters:
         return cls(Symbol.from_dict(d, **kwargs), {})
     @property
-    def args(self):
+    def args(self) -> list:
         return self.graph.args
     @property
-    def op_name(self):
+    def op_name(self) -> str:
         return self.graph.op_name
     @property
-    def name(self):
+    def name(self) -> str:
         return self.graph.name
     @property
-    def shape(self):
+    def shape(self) -> typing.Optional[ShapeT]:
         return self.graph.shape
     @property
-    def dtype(self):
+    def dtype(self) -> str:
         return self.graph.dtype
     @property
-    def attrs(self):
+    def attrs(self) -> dict:
         return self.graph.attrs
     @property
-    def extra_attrs(self):
+    def extra_attrs(self) -> dict:
         return self.graph.extra_attrs
     def set_extra_attrs(self, **kwargs):
         return self.graph.extra_attrs.update(kwargs)
     """Member Symbol End
     """
 
-@dataclass(repr=False)
 class SymbolParameters(SymbolBridge):
     graph: Symbol
     params: ParametersT = field(repr=False)
@@ -164,12 +163,12 @@ SymTransformerT = typing.Callable[[Graph], Graph]
         inherited from SymbolParameters.
 """
 
-@dataclass(repr=False)
 class SymbolTransformer(SymbolParameters):
     """ Symbol Transformer(Manipulator) """
 
-    RUN_ONCE: typing.ClassVar[bool] =False
+    RUN_ONCE: typing.ClassVar[bool] = False
 
+    # inherit SymbolParameters __init__
     def __init__(self, *args):
         super().__init__(*args)
 
@@ -219,10 +218,9 @@ class SymbolTransformer(SymbolParameters):
         """
         raise NotImplementedError()
 
-@dataclass(repr=False)
 class RunOnce(SymbolTransformer):
     RUN_ONCE: typing.ClassVar[bool] = True
 
     def __init__(self, *args): # symbol: Symbol, params: ParametersT):#, parsed: _BaseAttrs=None):
-            super().__init__(*args)
+        super().__init__(*args)
 

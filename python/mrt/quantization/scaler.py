@@ -9,9 +9,11 @@ from mrt.mir.symbol import *
 
 from mrt.mir.symbol_pass import SymbolBridge
 
-@dataclass(repr=False)
-#class WithScale(Symbol):
 class WithScale(SymbolBridge):
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     @classmethod
     def _validate_scale(cls, scale, msg=None):
         if isinstance(scale, (list, tuple)):

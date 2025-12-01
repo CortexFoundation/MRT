@@ -4,7 +4,7 @@ import typing
 import numpy as np
 
 
-from dataclasses import dataclass, field, InitVar
+from dataclasses import field, InitVar
 
 from mrt.mir import op, opns
 from mrt.mir.symbol import *
@@ -15,7 +15,6 @@ from mrt.mir.symbol_pass import SymbolTransformer
 SamplingFuncT = typing.Callable[
         [typing.Union[OpNumpyT, float]], typing.Any]
 
-@dataclass(repr=False)
 class Calibrator(SymbolTransformer):
     @property
     def raw_data(self) -> OpOutputT | None:
@@ -30,6 +29,10 @@ class Calibrator(SymbolTransformer):
     @data.setter
     def data(self, val):
         self.set_extra_attrs(data=val)
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     def _rand_data(self,
             enabled: bool = False,
@@ -99,7 +102,6 @@ class Calibrator(SymbolTransformer):
         assert val == expect, "{} vs. {}".format(val, expect)
 
 
-@dataclass(repr=False)
 class Sampling(SymbolTransformer):
     @property
     def data(self) -> typing.Any:
@@ -107,6 +109,10 @@ class Sampling(SymbolTransformer):
     @data.setter
     def data(self, val):
         self.set_extra_attrs(data=val)
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     @classmethod
     def sampling(cls, np_data: np.ndarray) -> typing.Any:
@@ -122,9 +128,12 @@ class Sampling(SymbolTransformer):
             self.data = self.sampling(origin.extra_attrs.get("raw_data"))
         return self.graph
 
-@dataclass(repr=False)
 class SymmetricMinMaxSampling(Sampling):
     threshold: typing.ClassVar[float] = 1e-5
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     @classmethod
     def sampling(cls, data: typing.List[OpNumpyT]) -> float:

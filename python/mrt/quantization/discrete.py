@@ -35,9 +35,13 @@ class DiscreteInfo:
         return self.scale is None and self.precision is None
 
 
-@dataclass(repr=False)
 class QuantInfo(WithScale, WithPrecision, Sampling):
-    requant_ops: typing.Dict[DiscreteInfo, Symbol] = field(repr=False, default_factory=dict)
+    requant_ops: typing.Dict[DiscreteInfo, Symbol] = {} #field(default_factory=dict)
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        self.requant_ops = {}
+        super().__init__(*args)
 
     def from_symbol(self, sym: Symbol) -> typing.Self:
         return type(self)(sym, self.params)
@@ -336,7 +340,6 @@ register_rules_with_default(
         scale_rule=softmax_scale_rules
 )
 
-@dataclass(repr=False)
 class Discretor(QuantInfo):
     """
         does operation -> out
@@ -363,6 +366,10 @@ class Discretor(QuantInfo):
         output precision <- precision(target)
         output scale <- scale
     """
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def __call__(self, **kw):
         if self.is_variable():
             return self.graph

@@ -16,7 +16,6 @@ class MultiHeadSymbol(dict):
         return MultiHeadSymbol({ name: symbol })
 
     def as_tuple(self) -> typing.Tuple[typing.List[str], symbol.Symbol]:
-        from . import op
         #  args = list(self.values())
         #  sym_type = type(args[0]) if args else Symbol
         mhs = self.origin or optype.infer_single(opclass.MRT_OP_MAP[opns.TUPLE](*list(self.values())))

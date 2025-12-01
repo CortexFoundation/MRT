@@ -23,11 +23,14 @@ _SCALE_CONSTANT_OPS = [
     opns.CLIP, opns.AS_TYPE,
         ]
 
-@dataclass(repr=False)
 class Spliter(RunOnce):
     head: typing.Optional[dict] = None
     head_params: typing.Optional[typing.Dict[str, OpNumpyT]] = None
     seg_names: typing.List[str] = field(default_factory=list)
+
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
 
     def __call__(self, **kwargs):
         """ Auto split the model. """
@@ -121,8 +124,11 @@ class Spliter(RunOnce):
         out.set_extra_attrs(head_params=self.head_params)
         return out
 
-@dataclass(repr=False)
 class Merger(WithScale, RunOnce):
+    # inherit SymbolParameters __init__
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def __call__(self, spliter: Symbol, **kwargs):
         assert self.op_name == opns.TUPLE
 
